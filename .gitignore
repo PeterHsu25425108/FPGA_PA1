@@ -1,1 +1,5 @@
 testcases/
+placer
+*.log
+obj/
+
