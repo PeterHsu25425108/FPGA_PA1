@@ -1,7 +1,6 @@
 CASENAME?=alu4
 SRCDIR=src
 OBJDIR=obj
-INCDIR = include
 
 # compiler settings 
 CXX = g++
