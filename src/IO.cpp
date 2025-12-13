@@ -111,3 +111,22 @@ void Solver::parser(string filename){
     }
     in_file.close();
 }
+
+void Solver::output(string filename){
+    ofstream ofs(filename);
+    if(!ofs.is_open()){
+        cerr << "Error: Cannot open output file " << filename << endl;
+        return;
+    }
+
+    for(auto &pos : best_block_positions){
+        int x = get<0>(pos);
+        int y = get<1>(pos);
+        string name = get<2>(pos);
+        stringstream ss;
+        ss << name << " " << x << " " << y << "\n";
+        ofs << ss.str();
+    }
+    ofs.close();
+
+}

@@ -6,6 +6,65 @@
 #include<cmath>
 using namespace std;
 
+double coolRate(double acceptRate)
+{
+    if(acceptRate > 0.95)
+        return 0.5;
+    else if(acceptRate > 0.8)
+        return 0.9;
+    else if(acceptRate > 0.15)
+        return 0.95;
+    else
+        return 0.8;
+}
+
+#define DEBUG_SA 1
+void Solver::SA_optimize(int max_iterations){
+
+    int iter = 0;
+    int changeTempIter = 1000; // number of iterations before changing temperature
+    double coolingRate = 0.95; // cooling rate for temperature
+    int acceptCount = 0; // count of consecutive rejections within current temperature
+    double initialTemp = 10000.0;
+    // acceptance rate calculation will be based on every changeTempIter iterations
+
+    T = initialTemp;
+    while(true){
+        iter++;
+
+        // perform one iteration of SA here
+
+        // pertubation
+        // pick a random block and a random target position
+        int block_idx = rand() % numLBs;
+        int new_x = rand() % C;
+        int new_y = rand() % R;
+        
+        // apply perturbation
+        bool accept_perturb = perturb(block_idx, new_x, new_y);
+
+        if(accept_perturb){
+            acceptCount++;
+        }
+
+        // After every changeTempIter iterations, update temperature
+        if(iter % changeTempIter == 0){
+            double acceptRate = static_cast<double>(acceptCount) / changeTempIter;
+            coolingRate = coolRate(acceptRate);
+            T *= coolingRate;
+            acceptCount = 0; // reset accept count for next temperature phase
+        }
+
+        // Termination conditions
+        if(max_iterations != -1 && iter >= max_iterations){
+            break;
+        }
+        if(T < 1e-3){ // temperature threshold
+            break;
+        }
+    }
+}
+
 // Assign initial positions to blocks and calculate initial cost
 // initialize the grid and SA parameters
 // calculate initial nets bounding boxes and total_wirelength
@@ -21,7 +80,7 @@ void Solver::initialize(){
     T = 1000.0; // initial temperature
     CC_linear = 0.0;
     CC_square = 0.0;
-    total_wirelength = 0;
+    prev_wirelength = 0;
 
     // assign initial random positions to blocks within the grid
     
@@ -70,13 +129,11 @@ void Solver::initialize(){
         }
 
         // calculate total_wirelength for this net
-        total_wirelength += (net.x_max - net.x_min) + (net.y_max - net.y_min);
+        prev_wirelength += (net.x_max - net.x_min) + (net.y_max - net.y_min);
     }
 
     // calculate the values of U
     for(auto &net : nets){
-        // TODO: net bounding box may have non-integer coordinates due to IOs, need to 
-        // change the below loop bond for x and y to handle that case
         int x_start, x_stop, y_start, y_end;
         // x_start and y_start: ceiling
         x_start = static_cast<int>(ceil(net.x_min));
@@ -109,14 +166,10 @@ void Solver::initialize(){
         cerr << "CC_linear is too small (" << CC_linear << "), may cause division by zero." << endl;
         exit(1);
     }
+    prev_CC = C*R * CC_square/(CC_linear * CC_linear);
 
-    double CC_init = C*R * CC_square/(CC_linear * CC_linear);
-
-    DEBUG_MSG("Initial total wirelength: " + to_string(total_wirelength), DEBUG_INITIALIZE);
-    DEBUG_MSG("Initial CC = " + to_string(CC_init), DEBUG_INITIALIZE);
-
-    // TODO: calculate initial total cost and update best_block_positions
-    // total_cost = total_wirelength + alpha * CC_linear + beta * CC_square;
+    DEBUG_MSG("Initial total wirelength: " + to_string(prev_wirelength), DEBUG_INITIALIZE);
+    DEBUG_MSG("Initial CC = " + to_string(prev_CC), DEBUG_INITIALIZE);
 
     best_block_positions.clear();
     for(auto &blk : blocks){
@@ -124,21 +177,3 @@ void Solver::initialize(){
     }
 }
 
-void Solver::output(string filename){
-    ofstream ofs(filename);
-    if(!ofs.is_open()){
-        cerr << "Error: Cannot open output file " << filename << endl;
-        return;
-    }
-
-    for(auto &pos : best_block_positions){
-        int x = get<0>(pos);
-        int y = get<1>(pos);
-        string name = get<2>(pos);
-        stringstream ss;
-        ss << name << " " << x << " " << y << "\n";
-        ofs << ss.str();
-    }
-    ofs.close();
-
-}

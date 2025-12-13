@@ -15,7 +15,7 @@ struct Block{
     Block(string name) : name(name), x(0), y(0) {}
 };
 
-// TODO: IO coordinates can be non-integer values or right on the right or top border
+// IO coordinates can be non-integer values or right on the right or top border
 struct IO{
     string name;
     double x;
@@ -53,6 +53,13 @@ public:
     // max_iterations: maximum number of iterations to perform; if -1, run until time limit
     void SA_optimize(int max_iterations=-1);
 
+    // perform perturbation: move a block to a new site
+    // return: accept perturbation or not
+    // if rejected, changes are rolled back
+    bool perturb(int block1_idx, int new_x, int new_y);
+
+
+
 private:
     int R, C, numLBs, numIOs, numNets;
     vector<Block> blocks;
@@ -69,8 +76,9 @@ private:
     // SA parameters
     double T;
     double CC_linear, CC_square; // the linear and square sums for congestion cost calculation
-    double total_wirelength;
-    double cost;
+    double prev_wirelength, prev_CC;
+    // cost components
+    double total_wirelength, CC;
 
 };
 #endif
