@@ -12,7 +12,6 @@ void Solver::parser(string filename){
     ifstream in_file(filename);
     string temp;
     stringstream ss;
-    int R, C, numLBs, numIOs, numNets;
     getline(in_file, temp);
     ss << temp;
     ss >> R >> C >> numLBs >> numIOs >> numNets;

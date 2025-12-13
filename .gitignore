@@ -2,4 +2,5 @@ testcases/
 placer
 *.log
 obj/
-
+*.out
+result/

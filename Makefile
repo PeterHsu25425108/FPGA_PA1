@@ -6,7 +6,7 @@ OBJDIR=obj
 CXX = g++
 CXXFLAGS = -I ./include -std=c++11 -DPRINTTIME=true -DNDEBUG 
 OPTFLAGS = -flto -funroll-loops -finline-functions -O3 -ffast-math
-WARNINGS = -Wall #-pg -g
+WARNINGS = -Wall -g #-pg
 
 SRCS = $(wildcard $(SRCDIR)/*.cpp)
 OBJS = $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(SRCS))
@@ -29,7 +29,13 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp | $(OBJDIR)
 -include $(DEPS)
 
 run: $(TARGET)
-	./$(TARGET) testcases/$(CASENAME).txt results/$(CASENAME).out > $(CASENAME).log
+	./$(TARGET) testcases/$(CASENAME).txt result/$(CASENAME).out > $(CASENAME).log
+
+check: $(TARGET)
+	./checker testcases/$(CASENAME).txt $(CASENAME).out
+
+run_val: $(TARGET)
+	valgrind --leak-check=full --show-leak-kinds=all --log-file=$(CASENAME)_valgrind.log ./$(TARGET) testcases/$(CASENAME).txt $(CASENAME).out > $(CASENAME).log
 
 clean:
 	rm -f $(TARGET)
@@ -37,4 +43,4 @@ clean:
 
 clean_txt:
 	rm -f *.txt *.log
-	rm -rf results/*
+#	rm -rf results/*

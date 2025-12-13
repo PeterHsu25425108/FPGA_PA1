@@ -5,9 +5,9 @@
 using namespace std;
 
 // the master debug flag: 0 -> switch off all debug msg
-#define MASTER_DEBUG 0
+#define MASTER_DEBUG 1
 // profiling flag
-#define PROFILING 0
+#define PROFILING 1
 
 void PROF_TIMER_ON(bool flag);
 void PROF_TIMER_OFF(const std::string& msg, bool flag);
