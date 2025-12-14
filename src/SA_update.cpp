@@ -72,7 +72,7 @@ bool Solver::perturb(int block1_idx, int new_x, int new_y, int& acceptCount) {
 
     // Cost Function
     // Uses raw delta based on your original loop setup
-    double delta_Cost = 100*initialTemp* (curr_wirelength - prev_wirelength)/prev_wirelength + /*1000.0 **/ (curr_CC - prev_CC)/prev_CC; 
+    double delta_Cost = 100*initialTemp* ((curr_wirelength - prev_wirelength)/prev_wirelength + (curr_CC - prev_CC)/prev_CC); 
     // double delta_Cost = 100*initialTemp* (curr_wirelength - prev_wirelength) + 1000.0 * (curr_CC - prev_CC); 
 
 

@@ -34,6 +34,9 @@ run: $(TARGET)
 check: result/$(CASENAME).out testcases/$(CASENAME).txt
 	./checker testcases/$(CASENAME).txt result/$(CASENAME).out
 
+check_init: result/$(CASENAME).out testcases/$(CASENAME).txt
+	./checker testcases/$(CASENAME).txt $(CASENAME).out
+
 run_val: $(TARGET)
 	valgrind --leak-check=full --show-leak-kinds=all --log-file=$(CASENAME)_valgrind.log ./$(TARGET) testcases/$(CASENAME).txt result/$(CASENAME).out > $(CASENAME).log
 
