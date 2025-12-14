@@ -21,6 +21,10 @@ int main(int argc, char* argv[]) {
     solver.initialize();
     DEBUG_MSG("Initialization finished.", DEBUG_MAIN);
 
+    DEBUG_MSG("Starting Simulated Annealing optimization...", DEBUG_MAIN);
+    solver.SA_optimize();
+    DEBUG_MSG("SA optimization finished.", DEBUG_MAIN);
+
     DEBUG_MSG("Ouputting solution...", DEBUG_MAIN);
     solver.output(outfileName);
     DEBUG_MSG("Output finished.", DEBUG_MAIN);

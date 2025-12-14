@@ -3,6 +3,9 @@
 #include"DEBUG.h"
 #include<vector>
 #include<unordered_map>
+#include<tuple>
+#include<string>
+#include<algorithm>
 using namespace std;
 
 struct Block{
@@ -38,29 +41,31 @@ struct Net{
     Net(string name) : name(name), x_min(0), x_max(0), y_min(0), y_max(0) {}
 };
 
+// NEW: Snapshot structure for incremental updates
+struct NetDiff {
+    int net_index;
+    double old_x_min, old_x_max, old_y_min, old_y_max;
+    double new_x_min, new_x_max, new_y_min, new_y_max;
+};
+
 class Solver{
 public:
     void parser(string filename);
-    Solver() {;}
+    Solver() {prog_start_time = clock();}
 
     // Assign initial positions to blocks and calculate initial cost
-    // initialize the grid and SA parameters
-    // calculate initial nets bounding boxes and HPWL
     void initialize();
     // output the best solution found
     void output(string filename);
     // perform simulated annealing to optimize block placement
-    // max_iterations: maximum number of iterations to perform; if -1, run until time limit
     void SA_optimize(int max_iterations=-1);
 
     // perform perturbation: move a block to a new site
-    // return: accept perturbation or not
-    // if rejected, changes are rolled back
-    bool perturb(int block1_idx, int new_x, int new_y);
-
-
+    bool perturb(int block1_idx, int new_x, int new_y, int& acceptCount);
 
 private:
+    double initialTemp = 800000.0;
+    clock_t prog_start_time, prog_end_time;
     int R, C, numLBs, numIOs, numNets;
     vector<Block> blocks;
     vector<tuple<int, int, string>> best_block_positions; // (x, y, block_name)
@@ -80,5 +85,13 @@ private:
     // cost components
     double total_wirelength, CC;
 
+    // --- INCREMENTAL HELPERS ---
+    // Helper to calculate the new bounding box given a proposed move/swap
+    bool calc_net_update(int net_idx, int b1_idx, int b1_new_x, int b1_new_y,
+                         int b2_idx, int b2_new_x, int b2_new_y, 
+                         NetDiff &diff);
+
+    // Helper to update U grid and global CC scores using the diffs
+    void update_congestion_map(const vector<NetDiff>& updates, bool is_rollback);
 };
 #endif

@@ -4,18 +4,19 @@
 #include<sstream>
 #include<vector>
 #include<cmath>
+#include<algorithm>
 using namespace std;
 
 double coolRate(double acceptRate)
 {
     if(acceptRate > 0.95)
-        return 0.5;
+        return 0.92;
     else if(acceptRate > 0.8)
-        return 0.9;
+        return 0.99;
     else if(acceptRate > 0.15)
-        return 0.95;
+        return 0.99;
     else
-        return 0.8;
+        return 0.9;
 }
 
 #define DEBUG_SA 1
@@ -25,15 +26,20 @@ void Solver::SA_optimize(int max_iterations){
     int changeTempIter = 1000; // number of iterations before changing temperature
     double coolingRate = 0.95; // cooling rate for temperature
     int acceptCount = 0; // count of consecutive rejections within current temperature
-    double initialTemp = 10000.0;
-    // acceptance rate calculation will be based on every changeTempIter iterations
-
+    
+    
     T = initialTemp;
     while(true){
+        // early stop mechanism
+        prog_end_time = clock();
+        double elapsed_secs = double(prog_end_time - prog_start_time) / CLOCKS_PER_SEC;
+        if(elapsed_secs > 235){ // 235 seconds
+            DEBUG_MSG("Early stopping SA due to time limit.", DEBUG_SA);
+            break;
+        }
+
         iter++;
-
-        // perform one iteration of SA here
-
+        PROF_TIMER_ON(DEBUG_SA);
         // pertubation
         // pick a random block and a random target position
         int block_idx = rand() % numLBs;
@@ -41,11 +47,7 @@ void Solver::SA_optimize(int max_iterations){
         int new_y = rand() % R;
         
         // apply perturbation
-        bool accept_perturb = perturb(block_idx, new_x, new_y);
-
-        if(accept_perturb){
-            acceptCount++;
-        }
+        bool accept_perturb = perturb(block_idx, new_x, new_y, acceptCount);
 
         // After every changeTempIter iterations, update temperature
         if(iter % changeTempIter == 0){
@@ -55,22 +57,21 @@ void Solver::SA_optimize(int max_iterations){
             acceptCount = 0; // reset accept count for next temperature phase
         }
 
+        PROF_TIMER_OFF("Iteration " + to_string(iter), DEBUG_SA);
+
         // Termination conditions
-        if(max_iterations != -1 && iter >= max_iterations){
-            break;
-        }
-        if(T < 1e-3){ // temperature threshold
-            break;
-        }
+        // if(max_iterations != -1 && iter >= max_iterations){
+        //     break;
+        // }
+        // if(T < 1e-3){ // temperature threshold
+        //     break;
+        // }
     }
 }
 
 // Assign initial positions to blocks and calculate initial cost
-// initialize the grid and SA parameters
-// calculate initial nets bounding boxes and total_wirelength
 #define DEBUG_INITIALIZE 1
 void Solver::initialize(){
-    // initialize grid coverage U and block occupancy
     DEBUG_MSG("Received grid size: R=" + to_string(R) + ", C=" + to_string(C), DEBUG_INITIALIZE);
     DEBUG_MSG("Initializing grid and block occupancy...", DEBUG_INITIALIZE);
     U.resize(C, vector<int>(R, 0));
@@ -83,15 +84,12 @@ void Solver::initialize(){
     prev_wirelength = 0;
 
     // assign initial random positions to blocks within the grid
-    
-    // For simplicity, we place blocks in the grid sequentially
     int block_index = 0;
     for(int x = 0; x < C; ++x){
         for(int y = 0; y < R; ++y){
             if(block_index < blocks.size()){
                 blocks[block_index].x = x;
                 blocks[block_index].y = y;
-                // initialize the values of block_occupancy
                 block_occupancy[x][y] = block_index;
                 ++block_index;
             }
@@ -106,7 +104,6 @@ void Solver::initialize(){
 
     // calculate initial nets bounding boxes and total_wirelength
     for(auto &net : nets){
-        // initialize bounding box
         net.x_min = C; net.x_max = 0;
         net.y_min = R; net.y_max = 0;
 
@@ -128,33 +125,22 @@ void Solver::initialize(){
             if(io.y > net.y_max) net.y_max = io.y;
         }
 
-        // calculate total_wirelength for this net
         prev_wirelength += (net.x_max - net.x_min) + (net.y_max - net.y_min);
     }
 
     // calculate the values of U
     for(auto &net : nets){
-        int x_start, x_stop, y_start, y_end;
-        // x_start and y_start: ceiling
-        x_start = static_cast<int>(ceil(net.x_min));
-        y_start = static_cast<int>(ceil(net.y_min));
+        int x_start = static_cast<int>(ceil(net.x_min));
+        int y_start = static_cast<int>(ceil(net.y_min));
 
-        // For each cell in the bounding box of the net, increment U
         for(int x = x_start; x < net.x_max; ++x){
             for(int y = y_start; y < net.y_max; ++y){
-                bool x_is_int = (x == static_cast<int>(x));
-                bool y_is_int = (y == static_cast<int>(y));
-                bool on_right_border = (x_is_int && x == C);
-                bool on_top_border = (y_is_int && y == R);
-
-                // if(x_is_int && y_is_int && !on_right_border && !on_top_border)
                 U[x][y] += 1;
             }
         }
     }
 
-    // calculate initial congestion cost components CC_linear and CC_square
-
+    // calculate initial congestion cost components
     for(double x = 0; x < C; ++x){
         for(double y = 0; y < R; ++y){
             CC_linear += U[x][y];
@@ -177,3 +163,273 @@ void Solver::initialize(){
     }
 }
 
+// --- INCREMENTAL HELPERS IMPLEMENTATION ---
+
+// Helper: Calculate new bounding box. 
+// Fully Optimized: Uses Anchor Checks to avoid O(N) scans on inward moves.
+bool Solver::calc_net_update(int net_idx, int b1_idx, int b1_new_x, int b1_new_y,
+                             int b2_idx, int b2_new_x, int b2_new_y, 
+                             NetDiff &diff) 
+{
+    Net &net = nets[net_idx];
+    diff.net_index = net_idx;
+
+    // 1. Snapshot Old State
+    diff.old_x_min = net.x_min; diff.old_x_max = net.x_max;
+    diff.old_y_min = net.y_min; diff.old_y_max = net.y_max;
+
+    // Initialize New State with Old State
+    diff.new_x_min = net.x_min; diff.new_x_max = net.x_max;
+    diff.new_y_min = net.y_min; diff.new_y_max = net.y_max;
+
+    // Pre-fetch positions (casting to double for consistent comparison)
+    // Note: Blocks have width 1.0, so Max = x + 1.0
+    double b1_old_x = (double)blocks[b1_idx].x;
+    double b1_old_y = (double)blocks[b1_idx].y;
+    double b1_next_x = (double)b1_new_x;
+    double b1_next_y = (double)b1_new_y;
+
+    double b2_old_x = 0, b2_old_y = 0;
+    double b2_next_x = 0, b2_next_y = 0;
+    bool has_b2 = (b2_idx != -1);
+
+    if (has_b2) {
+        b2_old_x = (double)blocks[b2_idx].x;
+        b2_old_y = (double)blocks[b2_idx].y;
+        b2_next_x = (double)b2_new_x;
+        b2_next_y = (double)b2_new_y;
+    }
+
+    // Flags to trigger full recalculation for an axis
+    bool recalc_x = false;
+    bool recalc_y = false;
+
+    // --- X-AXIS LOGIC ---
+    
+    // 1. Check for Extensions (Move Outward)
+    if (b1_next_x < diff.new_x_min) diff.new_x_min = b1_next_x;
+    if (b1_next_x + 1.0 > diff.new_x_max) diff.new_x_max = b1_next_x + 1.0;
+    
+    if (has_b2) {
+        if (b2_next_x < diff.new_x_min) diff.new_x_min = b2_next_x;
+        if (b2_next_x + 1.0 > diff.new_x_max) diff.new_x_max = b2_next_x + 1.0;
+    }
+
+    // 2. Check for Contractions (Move Inward from Boundary)
+    // Check Min Boundary Break
+    bool broken_xmin = (b1_old_x == diff.old_x_min) || (has_b2 && b2_old_x == diff.old_x_min);
+    
+    if (broken_xmin) {
+        // ANCHOR CHECK: Is the boundary still held by ANY block (new positions or stationary)?
+        bool anchor_found = false;
+        
+        // Check moving blocks at their NEW positions
+        if (b1_next_x == diff.old_x_min) anchor_found = true;
+        else if (has_b2 && b2_next_x == diff.old_x_min) anchor_found = true;
+        
+        // Check stationary blocks
+        if (!anchor_found) {
+            for (int blk_idx : net.connected_blocks) {
+                if (blk_idx == b1_idx || (has_b2 && blk_idx == b2_idx)) continue;
+                if ((double)blocks[blk_idx].x == diff.old_x_min) {
+                    anchor_found = true;
+                    break;
+                }
+            }
+        }
+        // Check IOs
+        if (!anchor_found) {
+            for (int io_idx : net.connected_ios) {
+                if (ios[io_idx].x == diff.old_x_min) {
+                    anchor_found = true;
+                    break;
+                }
+            }
+        }
+        
+        if (!anchor_found) recalc_x = true;
+    }
+
+    // Check Max Boundary Break (Note: Max is determined by x + 1.0)
+    if (!recalc_x) {
+        bool broken_xmax = (b1_old_x + 1.0 == diff.old_x_max) || (has_b2 && b2_old_x + 1.0 == diff.old_x_max);
+        
+        if (broken_xmax) {
+            bool anchor_found = false;
+            // Check moving blocks NEW positions
+            if (b1_next_x + 1.0 == diff.old_x_max) anchor_found = true;
+            else if (has_b2 && b2_next_x + 1.0 == diff.old_x_max) anchor_found = true;
+            
+            // Check stationary
+            if (!anchor_found) {
+                for (int blk_idx : net.connected_blocks) {
+                    if (blk_idx == b1_idx || (has_b2 && blk_idx == b2_idx)) continue;
+                    if ((double)blocks[blk_idx].x + 1.0 == diff.old_x_max) {
+                        anchor_found = true;
+                        break;
+                    }
+                }
+            }
+            // Check IOs (IOs are points, so just x, not x+1)
+            if (!anchor_found) {
+                for (int io_idx : net.connected_ios) {
+                    if (ios[io_idx].x == diff.old_x_max) {
+                        anchor_found = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!anchor_found) recalc_x = true;
+        }
+    }
+
+    // --- Y-AXIS LOGIC (Mirror of X) ---
+    
+    // 1. Extensions
+    if (b1_next_y < diff.new_y_min) diff.new_y_min = b1_next_y;
+    if (b1_next_y + 1.0 > diff.new_y_max) diff.new_y_max = b1_next_y + 1.0;
+
+    if (has_b2) {
+        if (b2_next_y < diff.new_y_min) diff.new_y_min = b2_next_y;
+        if (b2_next_y + 1.0 > diff.new_y_max) diff.new_y_max = b2_next_y + 1.0;
+    }
+
+    // 2. Contractions
+    bool broken_ymin = (b1_old_y == diff.old_y_min) || (has_b2 && b2_old_y == diff.old_y_min);
+    if (broken_ymin) {
+        bool anchor_found = false;
+        if (b1_next_y == diff.old_y_min) anchor_found = true;
+        else if (has_b2 && b2_next_y == diff.old_y_min) anchor_found = true;
+        
+        if (!anchor_found) {
+            for (int blk_idx : net.connected_blocks) {
+                if (blk_idx == b1_idx || (has_b2 && blk_idx == b2_idx)) continue;
+                if ((double)blocks[blk_idx].y == diff.old_y_min) { anchor_found = true; break; }
+            }
+        }
+        if (!anchor_found) {
+            for (int io_idx : net.connected_ios) {
+                if (ios[io_idx].y == diff.old_y_min) { anchor_found = true; break; }
+            }
+        }
+        if (!anchor_found) recalc_y = true;
+    }
+
+    if (!recalc_y) {
+        bool broken_ymax = (b1_old_y + 1.0 == diff.old_y_max) || (has_b2 && b2_old_y + 1.0 == diff.old_y_max);
+        if (broken_ymax) {
+            bool anchor_found = false;
+            if (b1_next_y + 1.0 == diff.old_y_max) anchor_found = true;
+            else if (has_b2 && b2_next_y + 1.0 == diff.old_y_max) anchor_found = true;
+            
+            if (!anchor_found) {
+                for (int blk_idx : net.connected_blocks) {
+                    if (blk_idx == b1_idx || (has_b2 && blk_idx == b2_idx)) continue;
+                    if ((double)blocks[blk_idx].y + 1.0 == diff.old_y_max) { anchor_found = true; break; }
+                }
+            }
+            if (!anchor_found) {
+                for (int io_idx : net.connected_ios) {
+                    if (ios[io_idx].y == diff.old_y_max) { anchor_found = true; break; }
+                }
+            }
+            if (!anchor_found) recalc_y = true;
+        }
+    }
+
+    // --- FINAL RECALCULATION (Only if Anchor Checks Failed) ---
+    if (recalc_x || recalc_y) {
+        double temp_xmin = (recalc_x) ? 1e9 : diff.new_x_min;
+        double temp_xmax = (recalc_x) ? -1e9 : diff.new_x_max;
+        double temp_ymin = (recalc_y) ? 1e9 : diff.new_y_min;
+        double temp_ymax = (recalc_y) ? -1e9 : diff.new_y_max;
+
+        // Scan Blocks
+        for (int blk_idx : net.connected_blocks) {
+            double bx, by;
+            if (blk_idx == b1_idx) { bx = b1_next_x; by = b1_next_y; }
+            else if (has_b2 && blk_idx == b2_idx) { bx = b2_next_x; by = b2_next_y; }
+            else { bx = (double)blocks[blk_idx].x; by = (double)blocks[blk_idx].y; }
+
+            if (recalc_x) {
+                if (bx < temp_xmin) temp_xmin = bx;
+                if (bx + 1.0 > temp_xmax) temp_xmax = bx + 1.0;
+            }
+            if (recalc_y) {
+                if (by < temp_ymin) temp_ymin = by;
+                if (by + 1.0 > temp_ymax) temp_ymax = by + 1.0;
+            }
+        }
+
+        // Scan IOs
+        for (int io_idx : net.connected_ios) {
+            double ix = ios[io_idx].x;
+            double iy = ios[io_idx].y;
+            if (recalc_x) {
+                if (ix < temp_xmin) temp_xmin = ix;
+                if (ix > temp_xmax) temp_xmax = ix;
+            }
+            if (recalc_y) {
+                if (iy < temp_ymin) temp_ymin = iy;
+                if (iy > temp_ymax) temp_ymax = iy;
+            }
+        }
+
+        if (recalc_x) { diff.new_x_min = temp_xmin; diff.new_x_max = temp_xmax; }
+        if (recalc_y) { diff.new_y_min = temp_ymin; diff.new_y_max = temp_ymax; }
+    }
+
+    // Return false if box didn't change (Optimization for calling function)
+    if (diff.old_x_min == diff.new_x_min && diff.old_x_max == diff.new_x_max &&
+        diff.old_y_min == diff.new_y_min && diff.old_y_max == diff.new_y_max) {
+        return false;
+    }
+
+    return true;
+}
+
+void Solver::update_congestion_map(const vector<NetDiff>& updates, bool is_rollback) {
+    for (const auto& diff : updates) {
+        double x_min_sub, x_max_sub, y_min_sub, y_max_sub;
+        double x_min_add, x_max_add, y_min_add, y_max_add;
+
+        if (!is_rollback) {
+            // Normal: Remove Old, Add New
+            x_min_sub = diff.old_x_min; x_max_sub = diff.old_x_max;
+            y_min_sub = diff.old_y_min; y_max_sub = diff.old_y_max;
+            x_min_add = diff.new_x_min; x_max_add = diff.new_x_max;
+            y_min_add = diff.new_y_min; y_max_add = diff.new_y_max;
+        } else {
+            // Rollback: Remove New, Add Old
+            x_min_sub = diff.new_x_min; x_max_sub = diff.new_x_max;
+            y_min_sub = diff.new_y_min; y_max_sub = diff.new_y_max;
+            x_min_add = diff.old_x_min; x_max_add = diff.old_x_max;
+            y_min_add = diff.old_y_min; y_max_add = diff.old_y_max;
+        }
+
+        // 1. Subtract
+        int xs = (int)ceil(x_min_sub), xe = (int)x_max_sub;
+        int ys = (int)ceil(y_min_sub), ye = (int)y_max_sub;
+        
+        for (int x = xs; x < xe; ++x) {
+            for (int y = ys; y < ye; ++y) {
+                CC_linear -= 1.0; 
+                CC_square -= (2.0 * U[x][y] - 1.0); 
+                U[x][y] -= 1;
+            }
+        }
+
+        // 2. Add
+        xs = (int)ceil(x_min_add); xe = (int)x_max_add;
+        ys = (int)ceil(y_min_add); ye = (int)y_max_add;
+
+        for (int x = xs; x < xe; ++x) {
+            for (int y = ys; y < ye; ++y) {
+                CC_linear += 1.0; 
+                CC_square += (2.0 * U[x][y] + 1.0); 
+                U[x][y] += 1;
+            }
+        }
+    }
+}

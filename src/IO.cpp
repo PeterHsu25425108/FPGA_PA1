@@ -7,7 +7,7 @@
 using namespace std;
 
 #define DEBUG_PARSER 1
-#define CHECK_PARSED_DATA 1
+#define CHECK_PARSED_DATA 0
 void Solver::parser(string filename){
     ifstream in_file(filename);
     string temp;
@@ -112,6 +112,7 @@ void Solver::parser(string filename){
     in_file.close();
 }
 
+#define DEBUG_OUTPUT 1
 void Solver::output(string filename){
     ofstream ofs(filename);
     if(!ofs.is_open()){
@@ -127,6 +128,8 @@ void Solver::output(string filename){
         ss << name << " " << x << " " << y << "\n";
         ofs << ss.str();
     }
+
+    DEBUG_MSG("Final performance: Wirelength = " + to_string(total_wirelength) + ", CC = " + to_string(CC), DEBUG_OUTPUT);
     ofs.close();
 
 }
