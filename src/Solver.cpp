@@ -44,7 +44,16 @@ void Solver::SA_optimize(int max_iterations){
         // pick a random block and a random target position
         int block_idx = rand() % numLBs;
         int new_x = rand() % C;
+        bool same = true;
+        while(new_x == blocks[block_idx].x) // ensure new_x is different
+        {
+            new_x = rand() % C;
+            same = false;
+        }
+
         int new_y = rand() % R;
+        while(new_y == blocks[block_idx].y && same) // ensure new_y is different
+            new_y = rand() % R;
         
         // apply perturbation
         bool accept_perturb = perturb(block_idx, new_x, new_y, acceptCount);
@@ -167,7 +176,8 @@ void Solver::initialize(){
 
 // Helper: Calculate new bounding box. 
 // Fully Optimized: Uses Anchor Checks to avoid O(N) scans on inward moves.
-#define ENABLE_SPEEDUP 1
+#define ENABLE_SPEEDUP 0
+#define CHECK_CORRECTNESS 1
 bool Solver::calc_net_update(int net_idx, int b1_idx, int b1_new_x, int b1_new_y,
                              int b2_idx, int b2_new_x, int b2_new_y, 
                              NetDiff &diff) 
@@ -205,6 +215,8 @@ bool Solver::calc_net_update(int net_idx, int b1_idx, int b1_new_x, int b1_new_y
     bool recalc_x = false;
     bool recalc_y = false;
 
+    bool broken_xmin, broken_xmax, broken_ymin, broken_ymax;
+
     // --- X-AXIS LOGIC ---
     
     // 1. Check for Extensions (Move Outward)
@@ -220,7 +232,7 @@ bool Solver::calc_net_update(int net_idx, int b1_idx, int b1_new_x, int b1_new_y
 
         // 2. Check for Contractions (Move Inward from Boundary)
         // Check Min Boundary Break
-        bool broken_xmin = (b1_old_x == diff.old_x_min) || (has_b2 && b2_old_x == diff.old_x_min);
+        broken_xmin = (b1_old_x == diff.old_x_min) || (has_b2 && b2_old_x == diff.old_x_min);
         
         if (broken_xmin) {
             // ANCHOR CHECK: Is the boundary still held by ANY block (new positions or stationary)?
@@ -256,7 +268,7 @@ bool Solver::calc_net_update(int net_idx, int b1_idx, int b1_new_x, int b1_new_y
 
         // Check Max Boundary Break (Note: Max is determined by x + 1.0)
         if (!recalc_x) {
-            bool broken_xmax = (b1_old_x + 1.0 == diff.old_x_max) || (has_b2 && b2_old_x + 1.0 == diff.old_x_max);
+            broken_xmax = (b1_old_x + 1.0 == diff.old_x_max) || (has_b2 && b2_old_x + 1.0 == diff.old_x_max);
             
             if (broken_xmax) {
                 bool anchor_found = false;
@@ -300,7 +312,7 @@ bool Solver::calc_net_update(int net_idx, int b1_idx, int b1_new_x, int b1_new_y
         }
 
         // 2. Contractions
-        bool broken_ymin = (b1_old_y == diff.old_y_min) || (has_b2 && b2_old_y == diff.old_y_min);
+        broken_ymin = (b1_old_y == diff.old_y_min) || (has_b2 && b2_old_y == diff.old_y_min);
         if (broken_ymin) {
             bool anchor_found = false;
             if (b1_next_y == diff.old_y_min) anchor_found = true;
@@ -321,7 +333,7 @@ bool Solver::calc_net_update(int net_idx, int b1_idx, int b1_new_x, int b1_new_y
         }
 
         if (!recalc_y) {
-            bool broken_ymax = (b1_old_y + 1.0 == diff.old_y_max) || (has_b2 && b2_old_y + 1.0 == diff.old_y_max);
+            broken_ymax = (b1_old_y + 1.0 == diff.old_y_max) || (has_b2 && b2_old_y + 1.0 == diff.old_y_max);
             if (broken_ymax) {
                 bool anchor_found = false;
                 if (b1_next_y + 1.0 == diff.old_y_max) anchor_found = true;
@@ -388,6 +400,83 @@ bool Solver::calc_net_update(int net_idx, int b1_idx, int b1_new_x, int b1_new_y
         if (recalc_x) { diff.new_x_min = temp_xmin; diff.new_x_max = temp_xmax; }
         if (recalc_y) { diff.new_y_min = temp_ymin; diff.new_y_max = temp_ymax; }
     }
+
+    // if recalc_x and recalc_y are both false, perform a scan as the above block to verify correctness
+    #if CHECK_CORRECTNESS
+    {
+        double verify_xmin = 1e9, verify_xmax = -1e9;
+        double verify_ymin = 1e9, verify_ymax = -1e9;
+        for (int blk_idx : net.connected_blocks) {
+            double bx = (blk_idx == b1_idx) ? b1_next_x : (has_b2 && blk_idx == b2_idx) ? b2_next_x : (double)blocks[blk_idx].x;
+            double by = (blk_idx == b1_idx) ? b1_next_y : (has_b2 && blk_idx == b2_idx) ? b2_next_y : (double)blocks[blk_idx].y;
+
+            if (bx < verify_xmin) verify_xmin = bx;
+            if (bx + 1.0 > verify_xmax) verify_xmax = bx + 1.0;
+            if (by < verify_ymin) verify_ymin = by;
+            if (by + 1.0 > verify_ymax) verify_ymax = by + 1.0;
+        }
+        for (int io_idx : net.connected_ios) {
+            double ix = ios[io_idx].x;
+            double iy = ios[io_idx].y;
+            if (ix < verify_xmin) verify_xmin = ix;
+            if (ix > verify_xmax) verify_xmax = ix;
+            if (iy < verify_ymin) verify_ymin = iy;
+            if (iy > verify_ymax) verify_ymax = iy;
+        }
+        // Compare
+        if (fabs(verify_xmin - diff.new_x_min) > 1e-6 || fabs(verify_xmax - diff.new_x_max) > 1e-6 ||
+            fabs(verify_ymin - diff.new_y_min) > 1e-6 || fabs(verify_ymax - diff.new_y_max) > 1e-6) {
+            cout << "Error in calc_net_update for net " << net.name << ": Mismatch in bounding box calculation!" << endl;
+            // Output recalc_x and recalc_y status
+            if(recalc_x) cout << "Recalculated X-axis." << endl;
+            if(recalc_y) cout << "Recalculated Y-axis." << endl;
+            // Ouput broken flags
+            if(broken_xmin) cout << "X Min boundary was broken." << endl;
+            if(broken_xmax) cout << "X Max boundary was broken." << endl;
+            if(broken_ymin) cout << "Y Min boundary was broken." << endl;
+            if(broken_ymax) cout << "Y Max boundary was broken." << endl;
+
+            cout << "Old Box: x_min=" << diff.old_x_min << ", x_max=" << diff.old_x_max
+                 << ", y_min=" << diff.old_y_min << ", y_max=" << diff.old_y_max << endl;
+            // List all other block and IO positions for debugging
+            cout << "Connected Blocks:" << endl;
+            for (int blk_idx : net.connected_blocks) {
+                if(blk_idx == b1_idx){
+                    double bx = b1_next_x;
+                    double by = b1_next_y;
+                    cout << "  Block "<< blocks[blk_idx].name << " at (" << (int)bx << "," << (int)by << ") [Moved]" << endl;
+                    continue;
+                }
+                else if(has_b2 && blk_idx == b2_idx){
+                    double bx = b2_next_x;
+                    double by = b2_next_y;
+                    cout << "  Block "<< blocks[blk_idx].name << " at (" << (int)bx << "," << (int)by << ") [Moved]" << endl;
+                    continue;
+                }
+                double bx = (double)blocks[blk_idx].x;
+                double by = (double)blocks[blk_idx].y;
+                cout << "  Block "<< blocks[blk_idx].name << " at (" << (int)bx << "," << (int)by << ")" << endl;
+            }
+            cout << "Connected IOs:" << endl;
+            for (int io_idx : net.connected_ios) {
+                cout << "  IO " << ios[io_idx].name << " at (" << (int)ios[io_idx].x << "," << (int)ios[io_idx].y << ")" << endl;
+            }
+
+            if (has_b2) {
+                cout << "Swapping Block 1 at (" << (int)b1_old_x << "," << (int)b1_old_y << ") with Block 2 at ("
+                     << (int)b2_old_x << "," << (int)b2_old_y << ")" << endl;
+            }else{
+                cout << "Block 1's original pos: (" << (int)b1_old_x << "," << (int)b1_old_y << "), "
+                     << "New pos: (" << b1_new_x << "," << b1_new_y << ")" << endl;
+            }
+
+            cout << "Calculated: x_min=" << diff.new_x_min << ", x_max=" << diff.new_x_max
+                 << ", y_min=" << diff.new_y_min << ", y_max=" << diff.new_y_max << endl;
+            cout << "Verified:   x_min=" << verify_xmin << ", x_max=" << verify_xmax
+                 << ", y_min=" << verify_ymin << ", y_max=" << verify_ymax << endl;
+        }
+    }
+    #endif
 
     // Return false if box didn't change (Optimization for calling function)
     if (diff.old_x_min == diff.new_x_min && diff.old_x_max == diff.new_x_max &&
