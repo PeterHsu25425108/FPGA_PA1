@@ -5,7 +5,7 @@
 using namespace std;
 
 // the master debug flag: 0 -> switch off all debug msg
-#define MASTER_DEBUG 0
+#define MASTER_DEBUG 1
 // profiling flag
 #define PROFILING 0
 

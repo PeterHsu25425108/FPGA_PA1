@@ -60,9 +60,9 @@ void Solver::SA_optimize(int max_iterations){
         PROF_TIMER_OFF("Iteration " + to_string(iter), DEBUG_SA);
 
         // Termination conditions
-        // if(max_iterations != -1 && iter >= max_iterations){
-        //     break;
-        // }
+        if(max_iterations != -1 && iter >= max_iterations){
+            break;
+        }
         // if(T < 1e-3){ // temperature threshold
         //     break;
         // }
@@ -167,6 +167,7 @@ void Solver::initialize(){
 
 // Helper: Calculate new bounding box. 
 // Fully Optimized: Uses Anchor Checks to avoid O(N) scans on inward moves.
+#define ENABLE_SPEEDUP 1
 bool Solver::calc_net_update(int net_idx, int b1_idx, int b1_new_x, int b1_new_y,
                              int b2_idx, int b2_new_x, int b2_new_y, 
                              NetDiff &diff) 
@@ -215,127 +216,135 @@ bool Solver::calc_net_update(int net_idx, int b1_idx, int b1_new_x, int b1_new_y
         if (b2_next_x + 1.0 > diff.new_x_max) diff.new_x_max = b2_next_x + 1.0;
     }
 
-    // 2. Check for Contractions (Move Inward from Boundary)
-    // Check Min Boundary Break
-    bool broken_xmin = (b1_old_x == diff.old_x_min) || (has_b2 && b2_old_x == diff.old_x_min);
-    
-    if (broken_xmin) {
-        // ANCHOR CHECK: Is the boundary still held by ANY block (new positions or stationary)?
-        bool anchor_found = false;
-        
-        // Check moving blocks at their NEW positions
-        if (b1_next_x == diff.old_x_min) anchor_found = true;
-        else if (has_b2 && b2_next_x == diff.old_x_min) anchor_found = true;
-        
-        // Check stationary blocks
-        if (!anchor_found) {
-            for (int blk_idx : net.connected_blocks) {
-                if (blk_idx == b1_idx || (has_b2 && blk_idx == b2_idx)) continue;
-                if ((double)blocks[blk_idx].x == diff.old_x_min) {
-                    anchor_found = true;
-                    break;
-                }
-            }
-        }
-        // Check IOs
-        if (!anchor_found) {
-            for (int io_idx : net.connected_ios) {
-                if (ios[io_idx].x == diff.old_x_min) {
-                    anchor_found = true;
-                    break;
-                }
-            }
-        }
-        
-        if (!anchor_found) recalc_x = true;
-    }
+    if(ENABLE_SPEEDUP){
 
-    // Check Max Boundary Break (Note: Max is determined by x + 1.0)
-    if (!recalc_x) {
-        bool broken_xmax = (b1_old_x + 1.0 == diff.old_x_max) || (has_b2 && b2_old_x + 1.0 == diff.old_x_max);
+        // 2. Check for Contractions (Move Inward from Boundary)
+        // Check Min Boundary Break
+        bool broken_xmin = (b1_old_x == diff.old_x_min) || (has_b2 && b2_old_x == diff.old_x_min);
         
-        if (broken_xmax) {
+        if (broken_xmin) {
+            // ANCHOR CHECK: Is the boundary still held by ANY block (new positions or stationary)?
             bool anchor_found = false;
-            // Check moving blocks NEW positions
-            if (b1_next_x + 1.0 == diff.old_x_max) anchor_found = true;
-            else if (has_b2 && b2_next_x + 1.0 == diff.old_x_max) anchor_found = true;
             
-            // Check stationary
+            // Check moving blocks at their NEW positions
+            // Don't need to update x's min
+            if (b1_next_x == diff.old_x_min) anchor_found = true;
+            else if (has_b2 && b2_next_x == diff.old_x_min) anchor_found = true;
+            
+            // Check stationary blocks
             if (!anchor_found) {
                 for (int blk_idx : net.connected_blocks) {
                     if (blk_idx == b1_idx || (has_b2 && blk_idx == b2_idx)) continue;
-                    if ((double)blocks[blk_idx].x + 1.0 == diff.old_x_max) {
+                    if ((double)blocks[blk_idx].x == diff.old_x_min) {
                         anchor_found = true;
                         break;
                     }
                 }
             }
-            // Check IOs (IOs are points, so just x, not x+1)
+            // Check IOs
             if (!anchor_found) {
                 for (int io_idx : net.connected_ios) {
-                    if (ios[io_idx].x == diff.old_x_max) {
+                    if (ios[io_idx].x == diff.old_x_min) {
                         anchor_found = true;
                         break;
                     }
                 }
             }
-
+            
             if (!anchor_found) recalc_x = true;
         }
-    }
 
-    // --- Y-AXIS LOGIC (Mirror of X) ---
-    
-    // 1. Extensions
-    if (b1_next_y < diff.new_y_min) diff.new_y_min = b1_next_y;
-    if (b1_next_y + 1.0 > diff.new_y_max) diff.new_y_max = b1_next_y + 1.0;
+        // Check Max Boundary Break (Note: Max is determined by x + 1.0)
+        if (!recalc_x) {
+            bool broken_xmax = (b1_old_x + 1.0 == diff.old_x_max) || (has_b2 && b2_old_x + 1.0 == diff.old_x_max);
+            
+            if (broken_xmax) {
+                bool anchor_found = false;
+                // Check moving blocks NEW positions
+                if (b1_next_x + 1.0 == diff.old_x_max) anchor_found = true;
+                else if (has_b2 && b2_next_x + 1.0 == diff.old_x_max) anchor_found = true;
+                
+                // Check stationary
+                if (!anchor_found) {
+                    for (int blk_idx : net.connected_blocks) {
+                        if (blk_idx == b1_idx || (has_b2 && blk_idx == b2_idx)) continue;
+                        if ((double)blocks[blk_idx].x + 1.0 == diff.old_x_max) {
+                            anchor_found = true;
+                            break;
+                        }
+                    }
+                }
+                // Check IOs (IOs are points, so just x, not x+1)
+                if (!anchor_found) {
+                    for (int io_idx : net.connected_ios) {
+                        if (ios[io_idx].x == diff.old_x_max) {
+                            anchor_found = true;
+                            break;
+                        }
+                    }
+                }
 
-    if (has_b2) {
-        if (b2_next_y < diff.new_y_min) diff.new_y_min = b2_next_y;
-        if (b2_next_y + 1.0 > diff.new_y_max) diff.new_y_max = b2_next_y + 1.0;
-    }
+                if (!anchor_found) recalc_x = true;
+            }
+        }
 
-    // 2. Contractions
-    bool broken_ymin = (b1_old_y == diff.old_y_min) || (has_b2 && b2_old_y == diff.old_y_min);
-    if (broken_ymin) {
-        bool anchor_found = false;
-        if (b1_next_y == diff.old_y_min) anchor_found = true;
-        else if (has_b2 && b2_next_y == diff.old_y_min) anchor_found = true;
+        // --- Y-AXIS LOGIC (Mirror of X) ---
         
-        if (!anchor_found) {
-            for (int blk_idx : net.connected_blocks) {
-                if (blk_idx == b1_idx || (has_b2 && blk_idx == b2_idx)) continue;
-                if ((double)blocks[blk_idx].y == diff.old_y_min) { anchor_found = true; break; }
-            }
-        }
-        if (!anchor_found) {
-            for (int io_idx : net.connected_ios) {
-                if (ios[io_idx].y == diff.old_y_min) { anchor_found = true; break; }
-            }
-        }
-        if (!anchor_found) recalc_y = true;
-    }
+        // 1. Extensions
+        if (b1_next_y < diff.new_y_min) diff.new_y_min = b1_next_y;
+        if (b1_next_y + 1.0 > diff.new_y_max) diff.new_y_max = b1_next_y + 1.0;
 
-    if (!recalc_y) {
-        bool broken_ymax = (b1_old_y + 1.0 == diff.old_y_max) || (has_b2 && b2_old_y + 1.0 == diff.old_y_max);
-        if (broken_ymax) {
+        if (has_b2) {
+            if (b2_next_y < diff.new_y_min) diff.new_y_min = b2_next_y;
+            if (b2_next_y + 1.0 > diff.new_y_max) diff.new_y_max = b2_next_y + 1.0;
+        }
+
+        // 2. Contractions
+        bool broken_ymin = (b1_old_y == diff.old_y_min) || (has_b2 && b2_old_y == diff.old_y_min);
+        if (broken_ymin) {
             bool anchor_found = false;
-            if (b1_next_y + 1.0 == diff.old_y_max) anchor_found = true;
-            else if (has_b2 && b2_next_y + 1.0 == diff.old_y_max) anchor_found = true;
+            if (b1_next_y == diff.old_y_min) anchor_found = true;
+            else if (has_b2 && b2_next_y == diff.old_y_min) anchor_found = true;
             
             if (!anchor_found) {
                 for (int blk_idx : net.connected_blocks) {
                     if (blk_idx == b1_idx || (has_b2 && blk_idx == b2_idx)) continue;
-                    if ((double)blocks[blk_idx].y + 1.0 == diff.old_y_max) { anchor_found = true; break; }
+                    if ((double)blocks[blk_idx].y == diff.old_y_min) { anchor_found = true; break; }
                 }
             }
             if (!anchor_found) {
                 for (int io_idx : net.connected_ios) {
-                    if (ios[io_idx].y == diff.old_y_max) { anchor_found = true; break; }
+                    if (ios[io_idx].y == diff.old_y_min) { anchor_found = true; break; }
                 }
             }
             if (!anchor_found) recalc_y = true;
         }
+
+        if (!recalc_y) {
+            bool broken_ymax = (b1_old_y + 1.0 == diff.old_y_max) || (has_b2 && b2_old_y + 1.0 == diff.old_y_max);
+            if (broken_ymax) {
+                bool anchor_found = false;
+                if (b1_next_y + 1.0 == diff.old_y_max) anchor_found = true;
+                else if (has_b2 && b2_next_y + 1.0 == diff.old_y_max) anchor_found = true;
+                
+                if (!anchor_found) {
+                    for (int blk_idx : net.connected_blocks) {
+                        if (blk_idx == b1_idx || (has_b2 && blk_idx == b2_idx)) continue;
+                        if ((double)blocks[blk_idx].y + 1.0 == diff.old_y_max) { anchor_found = true; break; }
+                    }
+                }
+                if (!anchor_found) {
+                    for (int io_idx : net.connected_ios) {
+                        if (ios[io_idx].y == diff.old_y_max) { anchor_found = true; break; }
+                    }
+                }
+                if (!anchor_found) recalc_y = true;
+            }
+        }
+    }else{
+        // If speedup disabled, always recalc both axes
+        recalc_x = true;
+        recalc_y = true;
     }
 
     // --- FINAL RECALCULATION (Only if Anchor Checks Failed) ---

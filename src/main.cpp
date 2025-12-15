@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
     DEBUG_MSG("Initialization finished.", DEBUG_MAIN);
 
     DEBUG_MSG("Starting Simulated Annealing optimization...", DEBUG_MAIN);
-    solver.SA_optimize();
+    solver.SA_optimize(10);
     DEBUG_MSG("SA optimization finished.", DEBUG_MAIN);
 
     DEBUG_MSG("Ouputting solution...", DEBUG_MAIN);
