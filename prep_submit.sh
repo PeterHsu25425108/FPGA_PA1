@@ -7,7 +7,8 @@ if [ ! -d "submission" ]; then
 else
   rm -rf submission/*
 fi
-
+# convert Report.md to report.pdf using pandoc
+pandoc Report.md -o report.pdf
 cp Makefile submission/
 cp report.pdf submission/
 cp -r src/ submission/

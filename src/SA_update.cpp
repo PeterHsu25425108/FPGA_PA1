@@ -12,7 +12,7 @@ using namespace std;
 bool Solver::perturb(int block1_idx, int new_x, int new_y, int& acceptCount) {
     
     // --- STATIC BUFFERS (Optimization: Avoid re-allocation) ---
-    static vector<int> affected_nets;
+    static vector<pair<int, bool>> affected_nets; // net_id, block1_is_in_net
     static vector<NetDiff> net_diffs;
     affected_nets.clear();
     net_diffs.clear();
@@ -28,26 +28,46 @@ bool Solver::perturb(int block1_idx, int new_x, int new_y, int& acceptCount) {
 
     // 2. Collect Affected Nets (Uniquely)
     const vector<int>& n1 = blocks[block1_idx].connected_nets;
-    affected_nets.insert(affected_nets.end(), n1.begin(), n1.end());
-
-    if (block2_idx != -1) {
-        const vector<int>& n2 = blocks[block2_idx].connected_nets;
-        affected_nets.insert(affected_nets.end(), n2.begin(), n2.end());
+    for (int net_id : n1) {
+        affected_nets.push_back(make_pair(net_id, true)); // block1 is in this net
     }
 
-    sort(affected_nets.begin(), affected_nets.end());
-    affected_nets.erase(unique(affected_nets.begin(), affected_nets.end()), affected_nets.end());
+    // Pre-compute nets in both blocks for fast filtering
+    unordered_set<int> nets_in_both;
+    if (block2_idx != -1) {
+        unordered_set<int> n1_set(n1.begin(), n1.end());
+        const vector<int>& n2 = blocks[block2_idx].connected_nets;
+        for (int net_id : n2) {
+            if (n1_set.count(net_id)) {
+                nets_in_both.insert(net_id);
+            }
+            affected_nets.push_back(make_pair(net_id, false)); // block1 may not be in this net
+        }
+    }
+
+    // Remove nets that contain both block1 and block2 (bounding box won't change on swap)
+    if (!nets_in_both.empty()) {
+        affected_nets.erase(
+            remove_if(affected_nets.begin(), affected_nets.end(),
+                [&nets_in_both](const pair<int, bool>& net_pair) {
+                    return nets_in_both.count(net_pair.first) > 0;
+                }),
+            affected_nets.end()
+        );
+    }
 
     // 3. Calculate Proposed Changes (NetDiffs)
     double delta_HPWL = 0;
 
-    for (int net_idx : affected_nets) {
+    for (const auto& net_pair : affected_nets) {
+        int net_idx = net_pair.first;
+        bool block1_is_in_net = net_pair.second;
         NetDiff diff;
         // Calculate the hypothetical new box without modifying the actual Net struct yet
         bool changed = calc_net_update(net_idx, 
                                        block1_idx, new_x, new_y, 
                                        block2_idx, b2_new_x, b2_new_y, 
-                                       diff);
+                                       diff, block1_is_in_net);
         if (changed) {
             net_diffs.push_back(diff);
             // HPWL = (xmax - xmin) + (ymax - ymin)
@@ -90,6 +110,9 @@ bool Solver::perturb(int block1_idx, int new_x, int new_y, int& acceptCount) {
 
     // 7. Commit or Rollback
     if (accept) {
+        DEBUG_MSG("Perturb accepted: ΔWirelength = " + to_string(curr_wirelength - prev_wirelength) +
+                  ", ΔCC = " + to_string(curr_CC - prev_CC) +
+                  ", ΔCost = " + to_string(delta_Cost), DEBUG_PERTURB);
         acceptCount++;
         // COMMIT:
         // A. Update Net Structs with the new boxes we calculated
@@ -121,7 +144,7 @@ bool Solver::perturb(int block1_idx, int new_x, int new_y, int& acceptCount) {
 
         // update best_block_positions if either wirelength or CC improved
         // and none of them are worse than before
-        if(/*curr_wirelength < total_wirelength && curr_CC < CC*/true){
+        if(curr_wirelength < total_wirelength && curr_CC < CC){
             total_wirelength = curr_wirelength;
             CC = curr_CC;
             best_block_positions.clear();
@@ -133,6 +156,7 @@ bool Solver::perturb(int block1_idx, int new_x, int new_y, int& acceptCount) {
         return true;
 
     } else {
+        DEBUG_MSG("Perturb rejected", DEBUG_PERTURB);
         // ROLLBACK:
         // A. Revert Grid and Global CC Scores
         update_congestion_map(net_diffs, true); // true = rollback

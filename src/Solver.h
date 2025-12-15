@@ -89,7 +89,7 @@ private:
     // Helper to calculate the new bounding box given a proposed move/swap
     bool calc_net_update(int net_idx, int b1_idx, int b1_new_x, int b1_new_y,
                          int b2_idx, int b2_new_x, int b2_new_y, 
-                         NetDiff &diff);
+                         NetDiff &diff, bool block1_is_in_net);
 
     // Helper to update U grid and global CC scores using the diffs
     void update_congestion_map(const vector<NetDiff>& updates, bool is_rollback);

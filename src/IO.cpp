@@ -113,6 +113,7 @@ void Solver::parser(string filename){
 }
 
 #define DEBUG_OUTPUT 1
+#define DEBUG_FINAL_PERFORMANCE 1
 void Solver::output(string filename){
     ofstream ofs(filename);
     if(!ofs.is_open()){
@@ -129,7 +130,8 @@ void Solver::output(string filename){
         ofs << ss.str();
     }
 
-    DEBUG_MSG("Final performance: Wirelength = " + to_string(total_wirelength) + ", CC = " + to_string(CC), DEBUG_OUTPUT);
+    if(DEBUG_FINAL_PERFORMANCE)
+        cout << "Final performance: Wirelength = " + to_string(total_wirelength) + ", CC = " + to_string(CC) << "\n";
     ofs.close();
 
 }
