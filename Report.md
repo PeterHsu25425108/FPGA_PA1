@@ -14,18 +14,18 @@ $$
 Where:
 - $\text{HPWL}$ is the sum of half-perimeter wirelengths of all nets.
 - $\text{CC}$ is a congestion metric based on the linear and quadratic sums of the cell coverage map $U$.
-- $\alpha$ and $\beta$ are scaling factors.
+- $\alpha$ and $\beta$ are scaling factors, the value is set to $100 \times T_0$ for both terms to balance their contributions.
 
 
 **Parameter values used:**
 - Initial temperature $T_0 = 800,000$
-- $\alpha = 100 \times T_0$
-- $\beta = 100 \times T_0$
-- Cooling interval: every 1000 iterations
-- Cooling rates: $0.92$ (acceptance rate $>0.95$), $0.99$ ($>0.8$), $0.995$ ($>0.5$), $0.999$ (otherwise)
+- Cooling interval: every 30,000 iterations (changed from 1,000)
+- Cooling rates: $0.9$ (acceptance rate $>0.95$), $0.99$ ($>0.8$), $0.99$ ($>0.15$), $0.9$ (otherwise)
+- Temperature threshold: $T < 1e-6$ for termination
 - Termination: after 235 seconds
 
-The cost function is normalized to allow fair comparison between moves and to balance the impact of wirelength and congestion.
+
+
 
 
 ## 3. Temperature Tuning Logic
@@ -35,18 +35,18 @@ The temperature schedule is adaptive and dynamically controlled based on the acc
 - The initial temperature $T_0$ is set to a high value (800,000) to allow broad exploration.
 
 **Cooling Schedule:**
-- Every 1000 iterations, the acceptance rate (ratio of accepted moves to attempted moves) is measured.
+- Every 5000 iterations, the acceptance rate (ratio of accepted moves to attempted moves) is measured.
 - The cooling rate is chosen according to the following logic:
 
 ```
 if (acceptRate > 0.95)
-	coolingRate = 0.92;
+	coolingRate = 0.9;
 else if (acceptRate > 0.8)
 	coolingRate = 0.99;
-else if (acceptRate > 0.5)
-	coolingRate = 0.995;
+else if (acceptRate > 0.15)
+	coolingRate = 0.99;
 else
-	coolingRate = 0.999;
+	coolingRate = 0.9;
 T = T * coolingRate;
 ```
 
@@ -60,9 +60,12 @@ To achieve high performance, the code uses several incremental update techniques
 ### 4.1. Net Bounding Box Updates
 - Each net maintains its bounding box ($x_{min}$, $x_{max}$, $y_{min}$, $y_{max}$).
 - When a block is moved or swapped, only the nets connected to the affected blocks are considered.
+- Nets that contain **both** moving blocks (during a swap) are filtered out since their bounding box cannot change.
 - For each affected net, a fast anchor check is performed:
-	- If the moved block was on the bounding box edge, a scan is performed to find the new min/max among remaining blocks and IOs.
-	- Otherwise, the bounding box is updated in $O(1)$ time.
+	- If the moved block was on the bounding box boundary, we check if another block/IO still "anchors" that boundary.
+	- If an anchor is found, the boundary is preserved without full recalculation.
+	- Otherwise, the full bounding box is recalculated by scanning all connected blocks and IOs.
+- The recalculation is performed separately for X and Y axes to avoid mixing partial results.
 - All changes are recorded in a `NetDiff` structure, allowing efficient rollback if a move is rejected.
 
 **Pseudocode:**
@@ -108,10 +111,17 @@ for each NetDiff in net_diffs:
 - Static buffers (`static vector<int> affected_nets` and `static vector<NetDiff> net_diffs`, see `SA_update.cpp`) are used for affected nets and net diffs to avoid repeated allocations.
 - All updates and rollbacks are performed in-place, minimizing overhead and maximizing cache efficiency.
 
-## 5. Review
-Having prior experience on SA placers, I know that the cost function design and incremental updates are critical for performance. This implementation focuses on these aspects to ensure efficient perturbation evaluation. 
+## 5. Optimization Improvements
 
-However, I have been busy in recent weeks, and incremental updates are inevitably more complex to implement correctly and it took me quite a lot of effort. As a result, when I started working on cal_net_update and update_congestion_cost, I was almost out of time,forcing me to finish them with the help of Gemini. While it works just fine, I noticed that it tend to overestimate the cost difference. This may lead to suboptimal moves being rejected more often than they should, potentially impacting the overall placement quality. Unfortunately, I did not have enough time to check and refine this part before the deadline.
+### 5.1 Affected Net Filtering
+During block swaps, nets that connect both moving blocks are excluded from the cost evaluation since their bounding box is invariant to the swap. This is detected using a hash set intersection in $O(n_1 + n_2)$ time, avoiding redundant calculations.
+
+### 5.2 Anchor-Based Boundary Checks
+The bounding box update uses anchor checks to determine when a boundary can change:
+- If a block moves away from a boundary, we search for another block/IO ("anchor") that still occupies that boundary position.
+- If an anchor exists, the boundary is preserved without full recalculation.
+- If no anchor exists, only that specific axis needs full recalculation, reducing redundant work.
+
 
 ## References
 <!-- To be completed manually -->

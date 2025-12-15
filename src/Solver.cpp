@@ -10,7 +10,7 @@ using namespace std;
 double coolRate(double acceptRate)
 {
     if(acceptRate > 0.95)
-        return 0.8;
+        return 0.9;
     else if(acceptRate > 0.8)
         return 0.99;
     else if(acceptRate > 0.15)
@@ -23,7 +23,7 @@ double coolRate(double acceptRate)
 void Solver::SA_optimize(int max_iterations){
 
     int iter = 0;
-    int changeTempIter = 1000; // number of iterations before changing temperature
+    int changeTempIter = 5000; // number of iterations before changing temperature
     double coolingRate = 0.95; // cooling rate for temperature
     int acceptCount = 0; // count of consecutive rejections within current temperature
     
@@ -72,7 +72,7 @@ void Solver::SA_optimize(int max_iterations){
         if(max_iterations != -1 && iter >= max_iterations){
             break;
         }
-        // if(T < 1e-3){ // temperature threshold
+        // if(T < 1e-9){ // temperature threshold
         //     break;
         // }
     }
