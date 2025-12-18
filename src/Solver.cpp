@@ -22,7 +22,7 @@ double coolRate(double acceptRate)
 #define DEBUG_SA 1
 void Solver::SA_optimize(int max_iterations){
 
-    int iter = 0;
+    long long int iter = 0;
     int changeTempIter = 5000; // number of iterations before changing temperature
     double coolingRate = 0.95; // cooling rate for temperature
     int acceptCount = 0; // count of consecutive rejections within current temperature
@@ -56,7 +56,7 @@ void Solver::SA_optimize(int max_iterations){
             new_y = rand() % R;
         
         // apply perturbation
-        bool accept_perturb = perturb(block_idx, new_x, new_y, acceptCount);
+        bool accept_perturb = perturb(block_idx, new_x, new_y, acceptCount, iter);
 
         // After every changeTempIter iterations, update temperature
         if(iter % changeTempIter == 0){
@@ -72,9 +72,9 @@ void Solver::SA_optimize(int max_iterations){
         if(max_iterations != -1 && iter >= max_iterations){
             break;
         }
-        // if(T < 1e-9){ // temperature threshold
-        //     break;
-        // }
+        if(T < 1e-3){ // temperature threshold
+            break;
+        }
     }
 }
 
@@ -165,34 +165,36 @@ void Solver::initialize(){
     prev_CC = C*R * CC_square/(CC_linear * CC_linear);
     CC = prev_CC;
 
-    DEBUG_MSG("Initial total wirelength: " + to_string(prev_wirelength), DEBUG_INITIALIZE);
-    DEBUG_MSG("Initial CC = " + to_string(prev_CC), DEBUG_INITIALIZE);
+    // DEBUG_MSG("Initial total wirelength: " + to_string(prev_wirelength), DEBUG_INITIALIZE);
+    cout << "Initial total wirelength = " << prev_wirelength << ", ";
+    // DEBUG_MSG("Initial CC = " + to_string(prev_CC), DEBUG_INITIALIZE);
+    cout << "Initial CC = " << prev_CC << endl;
 
     best_block_positions.clear();
     for(auto &blk : blocks){
         best_block_positions.push_back(make_tuple(blk.x, blk.y, blk.name));
     }
 
-    // print the bounding box for net_1623
-    string net_name = "net_1623";
-    for(auto &net : nets){
-        if(net.name == net_name){
-            DEBUG_MSG("Bounding box for " + net.name + ": x_min=" + to_string(net.x_min) + ", x_max=" + to_string(net.x_max) +
-                      ", y_min=" + to_string(net.y_min) + ", y_max=" + to_string(net.y_max), DEBUG_INITIALIZE);
-            // print all its connected blocks and IOs
-            DEBUG_MSG("Connected Blocks:", DEBUG_INITIALIZE);
-            for(auto blk_idx : net.connected_blocks){
-                Block &blk = blocks[blk_idx];
-                DEBUG_MSG("  Block " + blk.name + " at (" + to_string(blk.x) + "," + to_string(blk.y) + ")", DEBUG_INITIALIZE);
-            }
-            DEBUG_MSG("Connected IOs:", DEBUG_INITIALIZE);
-            for(auto io_idx : net.connected_ios){
-                IO &io = ios[io_idx];
-                DEBUG_MSG("  IO " + io.name + " at (" + to_string(io.x) + "," + to_string(io.y) + ")", DEBUG_INITIALIZE);
-            }
-            break;
-        }
-    }
+    // // print the bounding box for net_1623
+    // string net_name = "net_1623";
+    // for(auto &net : nets){
+    //     if(net.name == net_name){
+    //         DEBUG_MSG("Bounding box for " + net.name + ": x_min=" + to_string(net.x_min) + ", x_max=" + to_string(net.x_max) +
+    //                   ", y_min=" + to_string(net.y_min) + ", y_max=" + to_string(net.y_max), DEBUG_INITIALIZE);
+    //         // print all its connected blocks and IOs
+    //         DEBUG_MSG("Connected Blocks:", DEBUG_INITIALIZE);
+    //         for(auto blk_idx : net.connected_blocks){
+    //             Block &blk = blocks[blk_idx];
+    //             DEBUG_MSG("  Block " + blk.name + " at (" + to_string(blk.x) + "," + to_string(blk.y) + ")", DEBUG_INITIALIZE);
+    //         }
+    //         DEBUG_MSG("Connected IOs:", DEBUG_INITIALIZE);
+    //         for(auto io_idx : net.connected_ios){
+    //             IO &io = ios[io_idx];
+    //             DEBUG_MSG("  IO " + io.name + " at (" + to_string(io.x) + "," + to_string(io.y) + ")", DEBUG_INITIALIZE);
+    //         }
+    //         break;
+    //     }
+    // }
 }
 
 // --- INCREMENTAL HELPERS IMPLEMENTATION ---

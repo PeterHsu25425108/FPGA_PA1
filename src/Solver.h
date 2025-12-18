@@ -56,13 +56,15 @@ public:
     // Assign initial positions to blocks and calculate initial cost
     void initialize();
     // output the best solution found
-    void output(string filename);
+    void output(string filename, bool prt_perf=false);
     // perform simulated annealing to optimize block placement
     void SA_optimize(int max_iterations=-1);
 
     // perform perturbation: move a block to a new site
-    bool perturb(int block1_idx, int new_x, int new_y, int& acceptCount);
+    bool perturb(int block1_idx, int new_x, int new_y, int& acceptCount, long long int iter);
 
+    double getInitTemp() const { return initialTemp; }
+    void setInitTemp(double temp) { initialTemp = temp; }
 private:
     double initialTemp = 800000.0;
     clock_t prog_start_time, prog_end_time;
@@ -73,6 +75,8 @@ private:
     vector<Net> nets;
     unordered_map<string, int> block_name_to_index;
     unordered_map<string, int> io_name_to_index;
+    long long int best_sol_iter;
+    double best_Temp;
 
     // indexing: [x][y] (the first dim is x-coordinate, which is column index)
     vector<vector<int>> U; // store the coverage U of each grid cell

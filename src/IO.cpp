@@ -114,7 +114,7 @@ void Solver::parser(string filename){
 
 #define DEBUG_OUTPUT 1
 #define DEBUG_FINAL_PERFORMANCE 1
-void Solver::output(string filename){
+void Solver::output(string filename, bool prt_perf){
     ofstream ofs(filename);
     if(!ofs.is_open()){
         cerr << "Error: Cannot open output file " << filename << endl;
@@ -130,8 +130,10 @@ void Solver::output(string filename){
         ofs << ss.str();
     }
 
-    if(DEBUG_FINAL_PERFORMANCE)
+    if(DEBUG_FINAL_PERFORMANCE && prt_perf){
         cout << "Final performance: Wirelength = " + to_string(total_wirelength) + ", CC = " + to_string(CC) << "\n";
+        cout << "Best solution found at iteration " << best_sol_iter << ", Temperature = " << best_Temp << "\n";
+    }
     ofs.close();
 
 }

@@ -9,7 +9,7 @@ using namespace std;
 
 #define DEBUG_PERTURB 1
 // perform perturbation: move a block to a new site OR swap two blocks
-bool Solver::perturb(int block1_idx, int new_x, int new_y, int& acceptCount) {
+bool Solver::perturb(int block1_idx, int new_x, int new_y, int& acceptCount, long long int iter) {
     
     // --- STATIC BUFFERS (Optimization: Avoid re-allocation) ---
     static vector<pair<int, bool>> affected_nets; // net_id, block1_is_in_net
@@ -151,6 +151,8 @@ bool Solver::perturb(int block1_idx, int new_x, int new_y, int& acceptCount) {
             for(auto &blk : blocks){
                 best_block_positions.push_back(make_tuple(blk.x, blk.y, blk.name));
             }
+            best_sol_iter = iter;
+            best_Temp = T;
         }
 
         return true;
