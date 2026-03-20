@@ -42,6 +42,7 @@ int main(int argc, char* argv[]) {
     DEBUG_MSG("Ouputting solution...", DEBUG_MAIN);
     solver.output(outfileName, true);
     DEBUG_MSG("Output finished.", DEBUG_MAIN);
-    
+    solver.prtPerf();
+
     return 0;
 }

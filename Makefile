@@ -29,6 +29,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp | $(OBJDIR)
 -include $(DEPS)
 
 run: $(TARGET)
+	mkdir -p result
 	timeout 240s ./$(TARGET) testcases/$(CASENAME).txt result/$(CASENAME).out > $(CASENAME).log
 
 check: result/$(CASENAME).out testcases/$(CASENAME).txt

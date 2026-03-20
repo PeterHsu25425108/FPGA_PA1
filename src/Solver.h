@@ -60,6 +60,17 @@ public:
     // perform simulated annealing to optimize block placement
     void SA_optimize(int max_iterations=-1);
 
+    void prtPerf(){
+        cout << "Initial performance: Wirelength = " << initial_wirelength
+             << ", CC = " << initial_CC << "\n";
+        cout << "Final performance: Wirelength = " + to_string(total_wirelength) + ", CC = " + to_string(CC) << "\n";
+        cout << "Best solution found at iteration " << best_sol_iter << ", Temperature = " << best_Temp << "\n";
+        // print the net count and block count of the test case
+        cout << "Block count: " << blocks.size() << "\n";
+        cout << "Net count: " << nets.size() << "\n";
+        cout << "IO count: " << ios.size() << "\n";
+    }
+
     // perform perturbation: move a block to a new site
     bool perturb(int block1_idx, int new_x, int new_y, int& acceptCount, long long int iter);
 
@@ -88,6 +99,8 @@ private:
     double prev_wirelength, prev_CC;
     // cost components
     double total_wirelength, CC;
+    double initial_wirelength = 0.0;
+    double initial_CC = 0.0;
 
     // --- INCREMENTAL HELPERS ---
     // Helper to calculate the new bounding box given a proposed move/swap

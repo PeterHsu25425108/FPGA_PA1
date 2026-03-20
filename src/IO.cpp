@@ -130,10 +130,6 @@ void Solver::output(string filename, bool prt_perf){
         ofs << ss.str();
     }
 
-    if(DEBUG_FINAL_PERFORMANCE && prt_perf){
-        cout << "Final performance: Wirelength = " + to_string(total_wirelength) + ", CC = " + to_string(CC) << "\n";
-        cout << "Best solution found at iteration " << best_sol_iter << ", Temperature = " << best_Temp << "\n";
-    }
     ofs.close();
 
 }

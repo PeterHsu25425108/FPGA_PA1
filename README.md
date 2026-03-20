@@ -3,6 +3,17 @@
 ## 1. Overview
 This project implements a simulated annealing (SA) based placer for FPGA logic blocks and IOs. The placer aims to minimize total wirelength and congestion, efficiently handling large netlists and grid sizes by leveraging incremental update techniques and careful cost function design.
 
+### Performace Summary
+| Case Name | Initial Wirelength | Final Wirelength | Initial CC | Final CC | Net count | IO count | Block count |
+|-----------|--------------------|------------------|------------|----------|-----------|----------|-------------|
+|   alu4    |    5952.000000     |   3525.000000    |  1.607460  | 1.038649 |    222    |    16    |     475     |
+|   apex4   |    7803.000000     |   4671.000000    |  1.693350  | 1.038533 |    335    |    16    |     411     |
+|  clma_2   |    95364.000000    |   47026.000000   |  1.650540  | 1.024987 |   1559    |    61    |    3580     |
+| elliptic  |    15920.000000    |   9648.000000    |  1.407780  | 1.020499 |    467    |   128    |     968     |
+|    pdc    |    37012.000000    |   19404.000000   |  1.660340  | 1.036910 |    784    |    34    |    1513     |
+
+
+
 
 ## 2. Simulated Annealing Cost Function Design and Parameters
 The cost function used in the SA process is a weighted combination of total wirelength and congestion cost:

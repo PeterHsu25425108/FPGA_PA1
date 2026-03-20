@@ -164,11 +164,13 @@ void Solver::initialize(){
     }
     prev_CC = C*R * CC_square/(CC_linear * CC_linear);
     CC = prev_CC;
+    initial_wirelength = prev_wirelength;
+    initial_CC = prev_CC;
 
     // DEBUG_MSG("Initial total wirelength: " + to_string(prev_wirelength), DEBUG_INITIALIZE);
-    cout << "Initial total wirelength = " << prev_wirelength << ", ";
+    // cout << "Initial total wirelength = " << prev_wirelength << ", ";
     // DEBUG_MSG("Initial CC = " + to_string(prev_CC), DEBUG_INITIALIZE);
-    cout << "Initial CC = " << prev_CC << endl;
+    // cout << "Initial CC = " << prev_CC << endl;
 
     best_block_positions.clear();
     for(auto &blk : blocks){
