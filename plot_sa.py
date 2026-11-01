@@ -79,23 +79,23 @@ def plot_trace(case_name, trace, save_to):
 
     # HPWL
     ax = axes[0]
-    ax.plot(x, trace['HPWL'], color=COLOR_INITIAL, linewidth=1.2, label='current')
-    ax.plot(x, trace['best_HPWL'], color=COLOR_BEST, linewidth=2, label='best kept')
-    ax.set_title(f"HPWL   {hpwl0:,.0f} → {trace['best_HPWL'][-1]:,.0f}", fontsize=12,
+    ax.semilogy(x, trace['HPWL'], color=COLOR_INITIAL, linewidth=1.2, label='current')
+    ax.semilogy(x, trace['best_HPWL'], color=COLOR_BEST, linewidth=2, label='best kept')
+    ax.set_title(f"HPWL   {hpwl0:,.0f} → {trace['best_HPWL'][-1]:,.0f}   (log scale)", fontsize=12,
                  color=TEXT_PRIMARY, loc='left', pad=18)
     ax.legend(frameon=False, fontsize=9, loc='upper right')
-    finish_axes(ax, 'HPWL')
+    finish_axes(ax, 'HPWL (log)')
 
     # CC
     ax = axes[1]
-    ax.plot(x, trace['CC'], color=COLOR_FINAL, linewidth=1.2, label='current')
-    ax.plot(x, trace['best_CC'], color=COLOR_BEST, linewidth=2, label='best kept')
-    ax.axhline(1.0, color=TEXT_SECONDARY, linewidth=1, linestyle='--')
-    ax.text(x[-1], 1.0, 'CC = 1 (uniform)', ha='right', va='bottom', fontsize=8.5, color=TEXT_SECONDARY)
-    ax.set_title(f"Congestion cost CC   {cc0:.4f} → {trace['best_CC'][-1]:.4f}", fontsize=12,
+    # CC is bounded below by 1 (uniform coverage), so plot the excess CC - 1 on a log axis
+    ax.semilogy(x, trace['CC'] - 1, color=COLOR_FINAL, linewidth=1.2, label='current')
+    ax.semilogy(x, trace['best_CC'] - 1, color=COLOR_BEST, linewidth=2, label='best kept')
+    ax.set_title(f"Congestion cost CC   {cc0:.4f} → {trace['best_CC'][-1]:.4f}   "
+                 f"(plotted as CC − 1, log scale; CC = 1 is uniform)", fontsize=12,
                  color=TEXT_PRIMARY, loc='left')
     ax.legend(frameon=False, fontsize=9, loc='upper right')
-    finish_axes(ax, 'CC')
+    finish_axes(ax, 'CC − 1 (log)')
 
     # Cost function
     ax = axes[2]
