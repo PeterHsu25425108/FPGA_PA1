@@ -21,7 +21,7 @@ double coolRate(double acceptRate)
 
 void Solver::openTrace(string filename){
     trace_file.open(filename);
-    trace_file << "round,iter,time,T,accept_rate,HPWL,CC,best_HPWL,best_CC,T0\n";
+    trace_file << "round,iter,time,T,accept_rate,HPWL,CC,best_HPWL,best_CC,T0,R_limit\n";
 }
 
 void Solver::writeTrace(double temp, double acceptRate){
@@ -29,8 +29,13 @@ void Solver::writeTrace(double temp, double acceptRate){
     double elapsed_secs = double(clock() - prog_start_time) / CLOCKS_PER_SEC;
     trace_file << sa_round << "," << trace_iter << "," << elapsed_secs << "," << temp << ","
                << acceptRate << "," << prev_wirelength << "," << prev_CC << ","
-               << total_wirelength << "," << CC << "," << initialTemp << "\n";
+               << total_wirelength << "," << CC << "," << initialTemp << "," << rangeLimit << "\n";
 }
+
+// Range-limited moves (VPR): the target is picked within +-rangeLimit of the block, and
+// rangeLimit adapts so that about 44% of the moves get accepted
+#define RANGE_LIMIT 1
+#define TARGET_ACCEPT_RATE 0.44
 
 #define DEBUG_SA 1
 void Solver::SA_optimize(int max_iterations){
@@ -42,6 +47,7 @@ void Solver::SA_optimize(int max_iterations){
     
     
     T = initialTemp;
+    rangeLimit = max(C, R); // every round starts with the whole chip as the move range
     sa_round++;
     writeTrace(T, 1.0);
     while(true){
@@ -59,17 +65,31 @@ void Solver::SA_optimize(int max_iterations){
         // pertubation
         // pick a random block and a random target position
         int block_idx = rand() % numLBs;
-        int new_x = rand() % C;
-        bool same = true;
-        while(new_x == blocks[block_idx].x) // ensure new_x is different
-        {
-            new_x = rand() % C;
-            same = false;
+        int new_x, new_y;
+        if(RANGE_LIMIT){
+            // pick a different site within the move range around the block
+            int bx = blocks[block_idx].x, by = blocks[block_idx].y;
+            int r = max(1, static_cast<int>(rangeLimit));
+            int x_lo = max(0, bx - r), x_hi = min(C - 1, bx + r);
+            int y_lo = max(0, by - r), y_hi = min(R - 1, by + r);
+            do{
+                new_x = x_lo + rand() % (x_hi - x_lo + 1);
+                new_y = y_lo + rand() % (y_hi - y_lo + 1);
+            } while(new_x == bx && new_y == by);
         }
+        else{
+            new_x = rand() % C;
+            bool same = true;
+            while(new_x == blocks[block_idx].x) // ensure new_x is different
+            {
+                new_x = rand() % C;
+                same = false;
+            }
 
-        int new_y = rand() % R;
-        while(new_y == blocks[block_idx].y && same) // ensure new_y is different
             new_y = rand() % R;
+            while(new_y == blocks[block_idx].y && same) // ensure new_y is different
+                new_y = rand() % R;
+        }
         
         // apply perturbation
         bool accept_perturb = perturb(block_idx, new_x, new_y, acceptCount, iter);
@@ -80,6 +100,10 @@ void Solver::SA_optimize(int max_iterations){
             writeTrace(T, acceptRate); // T and accept rate of the step that just finished
             coolingRate = coolRate(acceptRate);
             T *= coolingRate;
+            if(RANGE_LIMIT){
+                rangeLimit *= 1.0 - TARGET_ACCEPT_RATE + acceptRate;
+                rangeLimit = min(max(rangeLimit, 1.0), static_cast<double>(max(C, R)));
+            }
             acceptCount = 0; // reset accept count for next temperature phase
         }
         DEBUG_MSG("wirelength: " + to_string(total_wirelength) + ", CC: " + to_string(CC) + ", T: " + to_string(T), DEBUG_SA);

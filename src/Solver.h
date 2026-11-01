@@ -100,6 +100,7 @@ private:
     ofstream trace_file;
     int sa_round = 0;
     long long int trace_iter = 0; // iterations accumulated over all SA rounds
+    double rangeLimit = 0; // half-width of the window a block may move within
     void writeTrace(double temp, double acceptRate);
 
     // indexing: [x][y] (the first dim is x-coordinate, which is column index)

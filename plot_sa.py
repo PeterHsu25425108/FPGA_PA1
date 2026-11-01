@@ -7,10 +7,10 @@ iterations of simulated annealing, from the <case>_trace.csv written by the plac
 The trace has one row per temperature step (every 5000 iterations).
 
 Cost function: SA_update.cpp accepts a move based on
-    dCost = 100 * T0 * (dHPWL / HPWL + dCC / CC)
-which is the step of the potential 100 * T0 * ln(HPWL * CC). The plotted cost is the T0-free part,
+    dCost = costScale * (dHPWL / HPWL + dCC / CC),   costScale = 100 * (round 1 T0)
+which is the step of the potential costScale * ln(HPWL * CC). The plotted cost is the scale-free part,
     ln(HPWL / HPWL_init) + ln(CC / CC_init),
-so 0 = initial placement, and every accepted move changes it by dCost / (100 * T0).
+so 0 = initial placement, and every accepted move changes it by dCost / costScale.
 """
 
 import argparse
@@ -63,8 +63,10 @@ def plot_trace(case_name, trace, save_to):
     cost = np.log(trace['HPWL'] / hpwl0) + np.log(trace['CC'] / cc0)
     best_cost = np.log(trace['best_HPWL'] / hpwl0) + np.log(trace['best_CC'] / cc0)
 
-    fig, axes = plt.subplots(5, 1, figsize=(14, 15), sharex=True, layout='constrained',
-                             gridspec_kw={'height_ratios': [1, 1, 1, 0.8, 0.8]})
+    has_range = 'R_limit' in trace
+    ratios = [1, 1, 1, 0.8, 0.8] + ([0.8] if has_range else [])
+    fig, axes = plt.subplots(len(ratios), 1, figsize=(14, 3 * sum(ratios)), sharex=True,
+                             layout='constrained', gridspec_kw={'height_ratios': ratios})
     for i, ax in enumerate(axes):
         shade_rounds(ax, trace, label=(i == 0))
 
@@ -94,14 +96,16 @@ def plot_trace(case_name, trace, save_to):
     ax.plot(x, best_cost, color=COLOR_BEST, linewidth=2, label='best kept')
     ax.axhline(0.0, color=TEXT_SECONDARY, linewidth=1, linestyle='--')
     ax.set_title('Cost function   ln(HPWL / HPWL₀) + ln(CC / CC₀)    '
-                 '(ΔCost in SA = 100·T₀ × Δ of this curve)', fontsize=12, color=TEXT_PRIMARY, loc='left')
+                 '(ΔCost in SA = 100·T₀,round1 × Δ of this curve)', fontsize=12, color=TEXT_PRIMARY, loc='left')
     ax.legend(frameon=False, fontsize=9, loc='upper right')
     finish_axes(ax, 'Cost')
 
     # Temperature
     ax = axes[3]
     ax.semilogy(x, trace['T'], color=TEXT_PRIMARY, linewidth=1.5)
-    ax.set_title(f"Temperature T   (T₀ = {trace['T0'][0]:,.0f}, ×0.9 per round)", fontsize=12,
+    t0_per_round = [trace['T0'][trace['round'] == k][0] for k in np.unique(trace['round'])]
+    ratio = f", ×{t0_per_round[1] / t0_per_round[0]:.2f} per round" if len(t0_per_round) > 1 else ""
+    ax.set_title(f"Temperature T   (T₀ = {t0_per_round[0]:,.0f}{ratio})", fontsize=12,
                  color=TEXT_PRIMARY, loc='left')
     finish_axes(ax, 'T (log)')
 
@@ -115,8 +119,18 @@ def plot_trace(case_name, trace, save_to):
     ax.set_title('Acceptance rate per temperature step   (thresholds of coolRate())', fontsize=12,
                  color=TEXT_PRIMARY, loc='left')
     finish_axes(ax, 'Accepted (%)')
-    ax.set_xlabel('Iteration (millions)')
-    ax.set_xlim(x[0], x[-1])
+
+    # Move range of range-limited moves
+    if has_range:
+        ax = axes[5]
+        ax.plot(x, trace['R_limit'], color='#eda100', linewidth=1.5)
+        ax.set_ylim(bottom=0)
+        ax.set_title('Move range R_limit   (target within ±R_limit of the block)', fontsize=12,
+                     color=TEXT_PRIMARY, loc='left')
+        finish_axes(ax, 'R_limit (cells)')
+
+    axes[-1].set_xlabel('Iteration (millions)')
+    axes[-1].set_xlim(x[0], x[-1])
 
     fig.suptitle(f"{case_name}: simulated annealing run   ({trace['iter'][-1] / 1e6:.1f}M iterations, "
                  f"{trace['time'][-1]:.0f} s)", fontsize=15, fontweight='bold', color=TEXT_PRIMARY,

@@ -1,4 +1,6 @@
 #include<iostream>
+#include<cstdlib>
+#include<string>
 #include"DEBUG.h"
 #include"Solver.h"
 using namespace std;
@@ -11,6 +13,9 @@ void parser(string filename);
 int main(int argc, char* argv[]) {
     string infileName = argv[1];
     string outfileName = argv[2];
+    // optional random seed; 1 is the default seed of rand(), so omitting it keeps earlier results
+    unsigned int seed = argc > 3 ? stoul(argv[3]) : 1;
+    srand(seed);
 
     Solver solver;
     DEBUG_MSG("Starting parser...", DEBUG_MAIN);
