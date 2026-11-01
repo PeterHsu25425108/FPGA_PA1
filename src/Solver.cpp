@@ -54,6 +54,114 @@ void Solver::writeTrace(double temp, double acceptRate){
 #endif
 #define STALL_TOL 1e-4
 
+// Guided moves (rounds 2+): with probability GUIDED_PROB, pick the block (best of GUIDED_TOURNAMENT
+// random blocks) whose nets would shrink the most if it moved into its optimal region, and move it
+// to the least congested of GUIDED_TARGET_SAMPLES random sites in that region.
+// Nets with more than GUIDED_MAX_NET_DEG terminals are ignored (they span the chip anyway).
+#ifndef GUIDED_PROB
+#define GUIDED_PROB 0.3
+#endif
+#define GUIDED_TOURNAMENT 4
+#define GUIDED_TARGET_SAMPLES 4
+#define GUIDED_MAX_NET_DEG 30
+
+// Sum of net spans along one axis when the block sits at p (occupying [p, p+1]),
+// given each net's span [lo, hi] without the block
+static double spanCost(const vector<double>& lo, const vector<double>& hi, int p){
+    double cost = 0;
+    for(size_t i = 0; i < lo.size(); ++i)
+        cost += max(hi[i], p + 1.0) - min(lo[i], static_cast<double>(p));
+    return cost;
+}
+
+// Integer positions in [0, maxPos) minimizing spanCost: spanCost has slope -1 per net with p < lo
+// and +1 per net with p > hi - 1, so its minimum is between the medians of {lo} and {hi - 1}
+static void optimalRange(const vector<double>& lo, const vector<double>& hi, int maxPos,
+                         int& from, int& to){
+    static vector<double> breaks;
+    breaks.clear();
+    for(size_t i = 0; i < lo.size(); ++i){
+        breaks.push_back(lo[i]);
+        breaks.push_back(hi[i] - 1);
+    }
+    sort(breaks.begin(), breaks.end());
+    size_t k = lo.size();
+    double a = breaks[k - 1], b = breaks[k];
+    from = static_cast<int>(ceil(a));
+    to = static_cast<int>(floor(b));
+    if(from > to) from = to = static_cast<int>(floor((a + b) / 2 + 0.5));
+    from = min(max(from, 0), maxPos - 1);
+    to = min(max(to, 0), maxPos - 1);
+}
+
+bool Solver::guidedMove(int& block_idx, int& new_x, int& new_y){
+    static vector<double> xl, xh, yl, yh;
+    double best_gain = 0;
+    int best_block = -1, rx0 = 0, rx1 = 0, ry0 = 0, ry1 = 0;
+
+    for(int t = 0; t < GUIDED_TOURNAMENT; ++t){
+        int b = rand() % numLBs;
+        // bounding box of every (small) net of b, without b itself
+        xl.clear(); xh.clear(); yl.clear(); yh.clear();
+        for(int net_idx : blocks[b].connected_nets){
+            const Net& net = nets[net_idx];
+            if(net.connected_blocks.size() + net.connected_ios.size() > GUIDED_MAX_NET_DEG) continue;
+            double x0 = C, x1 = 0, y0 = R, y1 = 0;
+            bool has_other = false;
+            for(int other : net.connected_blocks){
+                if(other == b) continue;
+                x0 = min(x0, static_cast<double>(blocks[other].x));
+                x1 = max(x1, blocks[other].x + 1.0);
+                y0 = min(y0, static_cast<double>(blocks[other].y));
+                y1 = max(y1, blocks[other].y + 1.0);
+                has_other = true;
+            }
+            for(int io : net.connected_ios){
+                x0 = min(x0, ios[io].x); x1 = max(x1, ios[io].x);
+                y0 = min(y0, ios[io].y); y1 = max(y1, ios[io].y);
+                has_other = true;
+            }
+            if(!has_other) continue;
+            xl.push_back(x0); xh.push_back(x1);
+            yl.push_back(y0); yh.push_back(y1);
+        }
+        if(xl.empty()) continue;
+
+        int x0, x1, y0, y1;
+        optimalRange(xl, xh, C, x0, x1);
+        optimalRange(yl, yh, R, y0, y1);
+        int bx = blocks[b].x, by = blocks[b].y;
+        double gain = spanCost(xl, xh, bx) - spanCost(xl, xh, min(max(bx, x0), x1))
+                    + spanCost(yl, yh, by) - spanCost(yl, yh, min(max(by, y0), y1));
+        if(gain > best_gain){
+            best_gain = gain;
+            best_block = b;
+            rx0 = x0; rx1 = x1; ry0 = y0; ry1 = y1;
+        }
+    }
+    if(best_block < 0) return false;
+
+    // target: among a few random sites of the optimal region, prefer an empty one, then the lowest U
+    int best_x = -1, best_y = -1;
+    bool best_empty = false;
+    int best_U = 0;
+    for(int s = 0; s < GUIDED_TARGET_SAMPLES; ++s){
+        int x = rx0 + rand() % (rx1 - rx0 + 1);
+        int y = ry0 + rand() % (ry1 - ry0 + 1);
+        if(x == blocks[best_block].x && y == blocks[best_block].y) continue;
+        bool empty = block_occupancy[x][y] == -1;
+        if(best_x == -1 || (empty && !best_empty) || (empty == best_empty && U[x][y] < best_U)){
+            best_x = x; best_y = y; best_empty = empty; best_U = U[x][y];
+        }
+    }
+    if(best_x == -1) return false;
+
+    block_idx = best_block;
+    new_x = best_x;
+    new_y = best_y;
+    return true;
+}
+
 #define DEBUG_SA 1
 void Solver::SA_optimize(int max_iterations){
 
@@ -94,32 +202,38 @@ void Solver::SA_optimize(int max_iterations){
         trace_iter++;
         PROF_TIMER_ON(DEBUG_SA);
         // pertubation
-        // pick a random block and a random target position
-        int block_idx = rand() % numLBs;
-        int new_x, new_y;
-        if(RANGE_LIMIT){
-            // pick a different site within the move range around the block
-            int bx = blocks[block_idx].x, by = blocks[block_idx].y;
-            int r = max(1, static_cast<int>(rangeLimit));
-            int x_lo = max(0, bx - r), x_hi = min(C - 1, bx + r);
-            int y_lo = max(0, by - r), y_hi = min(R - 1, by + r);
-            do{
-                new_x = x_lo + rand() % (x_hi - x_lo + 1);
-                new_y = y_lo + rand() % (y_hi - y_lo + 1);
-            } while(new_x == bx && new_y == by);
-        }
-        else{
-            new_x = rand() % C;
-            bool same = true;
-            while(new_x == blocks[block_idx].x) // ensure new_x is different
-            {
-                new_x = rand() % C;
-                same = false;
+        // rounds 2+: some moves are guided towards a block's optimal region; the rest (and all of
+        // round 1) pick a random block and a random target position
+        int block_idx, new_x, new_y;
+        bool guided = sa_round >= 2 && GUIDED_PROB > 0
+                      && static_cast<double>(rand()) / RAND_MAX < GUIDED_PROB
+                      && guidedMove(block_idx, new_x, new_y);
+        if(!guided){
+            block_idx = rand() % numLBs;
+            if(RANGE_LIMIT){
+                // pick a different site within the move range around the block
+                int bx = blocks[block_idx].x, by = blocks[block_idx].y;
+                int r = max(1, static_cast<int>(rangeLimit));
+                int x_lo = max(0, bx - r), x_hi = min(C - 1, bx + r);
+                int y_lo = max(0, by - r), y_hi = min(R - 1, by + r);
+                do{
+                    new_x = x_lo + rand() % (x_hi - x_lo + 1);
+                    new_y = y_lo + rand() % (y_hi - y_lo + 1);
+                } while(new_x == bx && new_y == by);
             }
+            else{
+                new_x = rand() % C;
+                bool same = true;
+                while(new_x == blocks[block_idx].x) // ensure new_x is different
+                {
+                    new_x = rand() % C;
+                    same = false;
+                }
 
-            new_y = rand() % R;
-            while(new_y == blocks[block_idx].y && same) // ensure new_y is different
                 new_y = rand() % R;
+                while(new_y == blocks[block_idx].y && same) // ensure new_y is different
+                    new_y = rand() % R;
+            }
         }
         
         // apply perturbation

@@ -75,6 +75,9 @@ public:
     // perform perturbation: move a block to a new site
     bool perturb(int block1_idx, int new_x, int new_y, int& acceptCount, long long int iter);
 
+    // pick a block and a target site in the block's optimal region (guided move); false if none found
+    bool guidedMove(int& block_idx, int& new_x, int& new_y);
+
     // write one row per temperature step of SA_optimize to a CSV file (for plotting the SA run)
     void openTrace(string filename);
 
