@@ -81,6 +81,9 @@ public:
     double getInitTemp() const { return initialTemp; }
     void setInitTemp(double temp) { initialTemp = temp; }
 private:
+    // cost scale is fixed at the first round's T0, so lowering initialTemp in later rounds
+    // really starts them colder instead of shrinking delta_Cost by the same factor
+    const double costScale = 100.0 * 800000.0;
     double initialTemp = 800000.0;
     clock_t prog_start_time, prog_end_time;
     int R, C, numLBs, numIOs, numNets;

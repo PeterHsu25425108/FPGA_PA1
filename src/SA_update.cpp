@@ -92,7 +92,7 @@ bool Solver::perturb(int block1_idx, int new_x, int new_y, int& acceptCount, lon
 
     // Cost Function
     // Uses raw delta based on your original loop setup
-    double delta_Cost = 100*initialTemp* ((curr_wirelength - prev_wirelength)/prev_wirelength + (curr_CC - prev_CC)/prev_CC); 
+    double delta_Cost = costScale * ((curr_wirelength - prev_wirelength)/prev_wirelength + (curr_CC - prev_CC)/prev_CC); 
     // double delta_Cost = 10*initialTemp* ((curr_wirelength - prev_wirelength) + (curr_CC - prev_CC) * prev_wirelength/prev_CC); 
     // double delta_Cost = 100*initialTemp* (curr_wirelength * curr_CC -prev_wirelength * prev_CC);
 
@@ -142,9 +142,9 @@ bool Solver::perturb(int block1_idx, int new_x, int new_y, int& acceptCount, lon
         prev_CC = curr_CC;
         DEBUG_MSG("Accepted move: New Wirelength = " + to_string(prev_wirelength) + ", New CC = " + to_string(prev_CC), DEBUG_PERTURB);
 
-        // update best_block_positions if either wirelength or CC improved
-        // and none of them are worse than before
-        if(curr_wirelength < total_wirelength && curr_CC < CC){
+        // update best_block_positions when the cost improves
+        // delta_Cost is the step of 100*T0*ln(HPWL*CC), so a lower HPWL*CC means a lower cost
+        if(curr_wirelength * curr_CC < total_wirelength * CC){
             total_wirelength = curr_wirelength;
             CC = curr_CC;
             best_block_positions.clear();
