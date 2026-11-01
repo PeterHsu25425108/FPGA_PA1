@@ -161,7 +161,8 @@ Examples:
 
     if args.all:
         cases = []
-        for output_file in sorted(Path('result').glob('*.out')):
+        # public test cases first, then the hidden ones
+        for output_file in sorted(Path('result').glob('*.out'), key=lambda f: (f.stem.startswith('hidden'), f.stem)):
             case_name = output_file.stem
             input_file = Path('testcases') / f"{case_name}.txt"
             if not input_file.exists():

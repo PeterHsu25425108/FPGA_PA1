@@ -9,7 +9,7 @@
 #   <case>_cc.png      initial | final congestion map U / mean(U), shared color scale
 #   <case>_hpwl.png    per-net HPWL charts (initial vs final)
 #   <case>_sa.png      HPWL / CC / cost / temperature over the SA iterations (needs result/<case>_trace.csv)
-# plus plot/summary.png comparing all cases
+# plus plot/summary.png comparing all cases; the plots embedded in README.md are copied to docs/figures/results/
 
 MODE=${1:-density}
 
@@ -89,6 +89,15 @@ if ls result/*_trace.csv > /dev/null 2>&1; then
 else
     echo "   ⚠️  No result/*_trace.csv found; rerun ./run_tests.sh with SA_TRACE enabled"
 fi
+echo ""
+
+# Copy the plots embedded in README.md into docs/ (plot/ itself is not tracked)
+DOC_PLOTS="summary.png hidden1_cc.png hidden2_cc.png hidden3_cc.png hidden3_sa.png"
+mkdir -p docs/figures/results
+for f in $DOC_PLOTS; do
+    [ -f "plot/$f" ] && cp "plot/$f" docs/figures/results/
+done
+echo "📄 Copied README plots to docs/figures/results/"
 echo ""
 
 echo "=========================================="

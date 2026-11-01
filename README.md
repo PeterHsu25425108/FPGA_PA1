@@ -8,6 +8,8 @@ This project implements a simulated annealing (SA) based placer for FPGA logic b
 This is the high-level flow; Section 7 shows the final flow with the refinements added after the original submission.
 
 ### Test Cases
+The three hidden test cases were added after all parameters had been chosen on the five public ones (Section 7.7).
+
 | Case | Grid (R × C) | Blocks | IOs | Nets | Block utilization |
 |------|--------------|--------|-----|------|-------------------|
 | alu4 | 26 × 26 | 475 | 16 | 222 | 70% |
@@ -15,6 +17,9 @@ This is the high-level flow; Section 7 shows the final flow with the refinements
 | clma_2 | 71 × 71 | 3580 | 61 | 1559 | 71% |
 | elliptic | 36 × 36 | 968 | 128 | 467 | 75% |
 | pdc | 48 × 48 | 1513 | 34 | 784 | 66% |
+| hidden1 | 65 × 65 | 3288 | 6 | 2187 | 78% |
+| hidden2 | 110 × 110 | 8910 | 136 | 2371 | 74% |
+| hidden3 | 119 × 119 | 13000 | 37 | 3577 | 92% |
 
 ### Performance Summary
 Results of the current version with seed 1 (`./run_tests.sh`):
@@ -26,9 +31,12 @@ Results of the current version with seed 1 (`./run_tests.sh`):
 | clma_2 | 95364 | 24687 | 1.6505 | 1.0150 | 2.0000 | 0.8738 |
 | elliptic | 15920 | 5137 | 1.4078 | 1.0215 | 2.0000 | 1.0483 |
 | pdc | 37012 | 14607 | 1.6603 | 1.0382 | 2.0000 | 1.0199 |
+| hidden1 | 104490 | 14824 | 1.7427 | 1.0096 | 2.0000 | 0.7212 |
+| hidden2 | 208661 | 20410 | 1.6623 | 1.0029 | 2.0000 | 0.7011 |
+| hidden3 | 212795 | 47600 | 1.5555 | 1.0053 | 2.0000 | 0.8699 |
 
 ### Comparison with the original version
-Measured by the cost $\text{HPWL} / \text{HPWL}_\text{init} + \text{CC} / \text{CC}_\text{init}$ of Section 2 (lower is better): mean over seeds 1 to 5, and mean wall-clock runtime with 25 runs in parallel. origin/main was rebuilt with this cost so that only the algorithm differs (Section 7.1).
+Measured by the cost $\text{HPWL} / \text{HPWL}_\text{init} + \text{CC} / \text{CC}_\text{init}$ of Section 2 (lower is better): mean over seeds 1 to 5, and mean wall-clock runtime with 25 runs in parallel (15 for the hidden test cases). origin/main was rebuilt with this cost so that only the algorithm differs (Section 7.1).
 
 | Case | origin/main cost | Current cost | Change | origin/main runtime | Current runtime | Change |
 |------|------------------|--------------|--------|---------------------|-----------------|--------|
@@ -37,8 +45,13 @@ Measured by the cost $\text{HPWL} / \text{HPWL}_\text{init} + \text{CC} / \text{
 | clma_2 | 1.0506 | **0.8671** | -17.5% | 122 s | **52 s** | -57% |
 | elliptic | 1.1966 | **1.0455** | -12.6% | 60 s | **28 s** | -54% |
 | pdc | 1.1263 | **1.0201** | -9.4% | 92 s | **44 s** | -52% |
+| hidden1 | 0.8924 | **0.7223** | -19.1% | 107 s | **44 s** | -59% |
+| hidden2 | 0.9385 | **0.7019** | -25.2% | 130 s | **54 s** | -58% |
+| hidden3 | 1.2389 | **0.8694** | -29.8% | 172 s | **88 s** | -49% |
 
-The changes are, in order: picking the best placement by total cost with a fixed cost scale (Sections 7.2, 7.3), range-limited moves (7.4), colder restarts and early stop (7.5), and guided moves (7.6). Section 7.1 shows the effect of each step.
+The changes are, in order: picking the best placement by total cost with a fixed cost scale (Sections 7.2, 7.3), range-limited moves (7.4), colder restarts and early stop (7.5), and guided moves (7.6). Section 7.1 shows the effect of each step on the public test cases, and Section 7.7 on the hidden ones.
+
+![Final vs initial HPWL and excess congestion of all test cases](docs/figures/results/summary.png)
 
 ## 2. Simulated Annealing Cost Function Design and Parameters
 The SA minimizes the total wirelength and the congestion cost, both normalized by their values in the initial placement:
@@ -99,7 +112,7 @@ T = T * coolingRate;
 
 The temperature drops quickly ($\times 0.9$) at both ends: when almost every move is accepted (the placement is still random), and when almost every move is rejected (the placement is frozen). In between, where most of the useful optimization happens, it cools slowly ($\times 0.99$).
 
-**Termination.** A round ends when $T < 10^{-3}$, or earlier once $R_\text{limit} = 1$ and the cost has not improved by more than 0.01% for 20 temperature steps (Section 7.5). A time limit of 235 seconds for the whole run is kept as a safety net; the test cases finish well before it (15 to 47 seconds for all 5 rounds).
+**Termination.** A round ends when $T < 10^{-3}$, or earlier once $R_\text{limit} = 1$ and the cost has not improved by more than 0.01% for 20 temperature steps (Section 7.5). A time limit of 235 seconds for the whole run is kept as a safety net; the test cases finish well before it (15 to 47 seconds for all 5 rounds on the public test cases, 45 to 95 seconds on the hidden ones).
 
 ## 4. Fast Incremental Updates for Nets, U, and Congestion Costs
 Every move only changes a few nets, so the costs are updated incrementally instead of being recomputed:
@@ -183,6 +196,7 @@ The bounding box update uses anchor checks to determine when a boundary can chan
 | `<case>_sa.png` | `plot_sa.py` | HPWL, $\text{CC} - 1$ and the cost gap to the final result (log scales), temperature, acceptance rate and $R_\text{limit}$ over the SA iterations |
 | `summary.png` | `plot_metrics.py --all` | HPWL and excess congestion $\text{CC} - 1$ of all cases, final as a percentage of initial |
 
+- `./plot_all.sh` also copies the result plots embedded in this report into `docs/figures/results/`, since `plot/` is not tracked.
 - The diagrams in this report are generated by `python3 docs/make_diagrams.py` into `docs/figures/` (PNG and SVG).
 
 
@@ -393,7 +407,62 @@ In the figure, the four dashed circles are the sampled sites, and the numbers ar
 
 **Effect.** The cost drops in 4 of 5 cases and is unchanged on apex4 (alu4 -0.1%, apex4 0.0%, clma_2 -0.9%, elliptic -0.3%, pdc -0.2%); only clma_2 and elliptic are clearly beyond the seed-to-seed noise. Runtime grows by up to 15%. Guided moves mostly shorten HPWL (mean HPWL: alu4 -1.4%, apex4 -0.7%, clma_2 -3.9%, elliptic -1.7%, pdc -1.6%), while CC rises slightly (mean CC: alu4 +0.0072, apex4 +0.0048, clma_2 +0.0034, elliptic +0.0040, pdc +0.0066), since the optimal region is chosen by wirelength and $U$ only breaks ties within it.
 
-### 7.7 Tools added for the analysis
+### 7.7 Results on the hidden test cases
+The three hidden test cases were only added after every parameter of Sections 7.2 to 7.6 had been chosen on the five public ones, so they show how well the changes carry over to unseen and much larger designs (2,187 to 3,577 nets and 3,288 to 13,000 blocks, against at most 1,559 nets and 3,580 blocks in the public cases; see Section 1). They were measured exactly like Section 7.1: every earlier version rebuilt with the cost of Section 2, seeds 1 to 5, 15 runs in parallel. The seed-to-seed standard deviation of the current version's cost is 0.1% to 0.2%.
+
+**Change of each step** (change of the mean cost from the step before; negative is better):
+
+| Step | Section | hidden1 | hidden2 | hidden3 |
+|------|---------|---|---|---|
+| origin/main (cost) | | 0.8924 | 0.9385 | 1.2389 |
+| Best by total cost, fixed cost scale | 7.2, 7.3 | -0.2% | -0.3% | -0.5% |
+| Range-limited moves | 7.4 | -16.3% | -19.5% | -22.1% |
+| Colder restarts, early stop | 7.5 | -1.9% | -4.4% | -6.5% |
+| Guided moves | 7.6 | -1.3% | -2.5% | -3.1% |
+| **Total vs origin/main** | | **-19.1%** | **-25.2%** | **-29.8%** |
+
+**Improvement over the initial placement** ($1 - \text{value} / \text{initial value}$; higher is better):
+
+| Stage | hidden1 Cost | hidden1 HPWL | hidden1 CC | hidden2 Cost | hidden2 HPWL | hidden2 CC | hidden3 Cost | hidden3 HPWL | hidden3 CC |
+|-------|---|---|---|---|---|---|---|---|---|
+| origin/main | 55.4% | 68.7% | 42.0% | 53.1% | 66.8% | 39.3% | 38.1% | 41.4% | 34.7% |
+| + Best by total cost, fixed cost scale | 55.5% | 69.0% | 41.9% | 53.2% | 67.1% | 39.3% | 38.4% | 42.1% | 34.7% |
+| + Range-limited moves | 62.7% | 83.1% | 42.3% | 62.3% | 84.9% | 39.8% | 52.0% | 68.6% | 35.4% |
+| + Colder restarts, early stop | 63.4% | 84.6% | 42.3% | 64.0% | 88.2% | 39.8% | 55.1% | 74.8% | 35.5% |
+| **+ Guided moves (current)** | **63.9%** | **85.7%** | **42.1%** | **64.9%** | **90.1%** | **39.7%** | **56.5%** | **77.7%** | **35.4%** |
+| *Upper bound of CC (CC = 1)* |  |  | *42.6%* |  |  | *39.8%* |  |  | *35.7%* |
+
+**Runtime** (mean wall-clock time, and change from origin/main; $-$ is shorter, $+$ is longer):
+
+| Stage | hidden1 | hidden2 | hidden3 |
+|-------|---|---|---|
+| origin/main | 107 s | 130 s | 172 s |
+| + Best by total cost, fixed cost scale | 102 s (-4%) | 128 s (-2%) | 167 s (-3%) |
+| + Range-limited moves | 99 s (-7%) | 155 s (+19%) | 217 s (+27%) |
+| + Colder restarts, early stop | 41 s (-62%) | 60 s (-54%) | 100 s (-42%) |
+| **+ Guided moves (current)** | **44 s (-59%)** | **54 s (-58%)** | **88 s (-49%)** |
+
+**Observations.**
+- The current version lowers the cost by 19% to 30% against origin/main, more than on any public test case (4.9% to 17.5%). The larger the design, the more the changes help, as already seen on clma_2, the largest public case.
+- **Range-limited moves** again give the largest single gain (hidden1 -16.3%, hidden2 -19.5%, hidden3 -22.1%), because on a large chip almost every random far move is rejected. They also make the two larger runs longer (hidden2 +19%, hidden3 +27% against origin/main): up to 219 seconds of CPU time on hidden3, close to the 235-second limit.
+- **Colder restarts and early stop** matter much more here than on the public cases (hidden1 -1.9%, hidden2 -4.4%, hidden3 -6.5%), besides cutting the runtime by more than half: the later rounds keep improving on the large designs (see the SA plot below).
+- **Guided moves** also help clearly more than on the public cases (hidden1 -1.3%, hidden2 -2.5%, hidden3 -3.1%), all far beyond the seed-to-seed noise. On a large chip, a random move within $R_\text{limit}$ rarely lands where a block's nets are shortest, so moving it straight into its optimal region pays off more.
+- As on the public cases, almost all of the gain comes from HPWL: CC is already within about one point of its bound for origin/main.
+- The current version's longest run takes 89 seconds of CPU time, well within the 235-second limit.
+
+![SA run of hidden3](docs/figures/results/hidden3_sa.png)
+
+The SA run of hidden3 (seed 1): every round from 2 to 5 lowers the best cost further (cost panel). Even with $R_\text{limit} = 1$, the acceptance rate stays around 33% to 42% on this large chip, so the rounds end through the early stop rather than by cooling to $T < 10^{-3}$.
+
+![Congestion map of hidden1](docs/figures/results/hidden1_cc.png)
+
+![Congestion map of hidden2](docs/figures/results/hidden2_cc.png)
+
+![Congestion map of hidden3](docs/figures/results/hidden3_cc.png)
+
+The congestion maps ($U / \text{mean}(U)$ on one shared scale, seed 1) show the initial placement on the left, which fills the chip column by column and leaves the right side empty, and the final placement on the right, where the coverage is nearly uniform.
+
+### 7.8 Tools added for the analysis
 - The SA trace, the seed option and `bench.py` (Section 6) were added to see where the original placer wasted time and to measure every step with several seeds.
 - The plots in `plot/` and the diagrams in `docs/figures/` (Section 6) visualize the results and the algorithm.
 
