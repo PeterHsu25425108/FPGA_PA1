@@ -6,6 +6,7 @@
 #include<tuple>
 #include<string>
 #include<algorithm>
+#include<fstream>
 using namespace std;
 
 struct Block{
@@ -74,6 +75,9 @@ public:
     // perform perturbation: move a block to a new site
     bool perturb(int block1_idx, int new_x, int new_y, int& acceptCount, long long int iter);
 
+    // write one row per temperature step of SA_optimize to a CSV file (for plotting the SA run)
+    void openTrace(string filename);
+
     double getInitTemp() const { return initialTemp; }
     void setInitTemp(double temp) { initialTemp = temp; }
 private:
@@ -88,6 +92,12 @@ private:
     unordered_map<string, int> io_name_to_index;
     long long int best_sol_iter;
     double best_Temp;
+
+    // SA trace output
+    ofstream trace_file;
+    int sa_round = 0;
+    long long int trace_iter = 0; // iterations accumulated over all SA rounds
+    void writeTrace(double temp, double acceptRate);
 
     // indexing: [x][y] (the first dim is x-coordinate, which is column index)
     vector<vector<int>> U; // store the coverage U of each grid cell

@@ -1,16 +1,39 @@
 #!/usr/bin/env python3
 """
 FPGA Placement Visualizer
-Reads input and output files and plots the block placement with nets
+Reads input and output files and plots the initial and final placement side by side,
+with nets drawn on one shared color scale.
+
+Geometry follows src/Solver.cpp:
+  - a block at (x, y) occupies cell [x, x+1] x [y, y+1]; an IO is a point on the boundary
+  - U[x][y] counts net bounding boxes covering cell (x, y), for ceil(min) <= x < max
+  - CC = N * sum(U^2) / sum(U)^2 = 1 + (std(U) / mean(U))^2
 """
 
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
-import sys
 import argparse
+import math
+import sys
 from pathlib import Path
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection, PatchCollection
+from matplotlib.colors import LinearSegmentedColormap, Normalize, TwoSlopeNorm
+import matplotlib.patches as patches
 import numpy as np
+
+# Palette: categorical slots 1/2 for final/initial, one-hue sequential for magnitude,
+# blue -> neutral gray -> red diverging for U / mean(U)
+COLOR_INITIAL = '#eb6834'
+COLOR_FINAL = '#2a78d6'
+TEXT_PRIMARY = '#0b0b0b'
+TEXT_SECONDARY = '#52514e'
+GRID_COLOR = '#d9d8d4'
+SEQUENTIAL = LinearSegmentedColormap.from_list(
+    'orange_seq', ['#fbf3ee', '#f6c9b3', '#eb6834', '#a63d12', '#4f1a05'])
+DIVERGING = LinearSegmentedColormap.from_list(
+    'cool_neutral_warm', ['#1c5cab', '#8fb8e8', '#f0efec', '#f0a07e', '#b8321a'])
 
 
 class FPGAPlacementParser:
@@ -88,304 +111,202 @@ class FPGAPlacementParser:
                     self.blocks[block_name] = (x, y)
 
 
-class FPGAPlotter:
-    def __init__(self, parser, show_nets=True, show_io_names=True, show_block_names=True, 
-                 net_mode='density'):
+class PlacementMetrics:
+    def __init__(self, parser):
         """
-        Initialize plotter
-        
+        Compute per-net bounding boxes, HPWL and the coverage map U for one placement
+
         Args:
-            parser: FPGAPlacementParser instance
-            show_nets: Whether to draw net information
-            show_io_names: Whether to label IO pins
-            show_block_names: Whether to label blocks
-            net_mode: How to visualize nets ('density', 'bboxes', 'lines', 'hpwl', 'none')
+            parser: FPGAPlacementParser instance with block positions filled in
         """
         self.parser = parser
-        self.show_nets = show_nets
-        self.show_io_names = show_io_names
-        self.show_block_names = show_block_names
-        self.net_mode = net_mode  # 'density', 'bboxes', 'lines', 'hpwl', 'none'
-    
-    def _calculate_hpwl(self):
-        """Calculate HPWL for all nets"""
-        net_hpwls = {}
+        self.C = int(parser.C)
+        self.R = int(parser.R)
+        self.bboxes = {}  # {net_name: (x_min, x_max, y_min, y_max)}
+        self.net_hpwl = {}  # {net_name: hpwl}
+        self.U = np.zeros((self.C, self.R), dtype=np.int64)  # indexed [x][y] like Solver.cpp
+
+        self._compute()
+
+    def _compute(self):
         for net_name, terminals in self.parser.nets.items():
-            positions = []
+            x_min, x_max = float(self.C), 0.0
+            y_min, y_max = float(self.R), 0.0
             for terminal in terminals:
                 if terminal in self.parser.blocks:
-                    positions.append(self.parser.blocks[terminal])
+                    bx, by = self.parser.blocks[terminal]
+                    x_min, x_max = min(x_min, bx), max(x_max, bx + 1)
+                    y_min, y_max = min(y_min, by), max(y_max, by + 1)
                 elif terminal in self.parser.ios:
-                    positions.append(self.parser.ios[terminal])
-            
-            if len(positions) < 2:
-                net_hpwls[net_name] = 0
-                continue
-            
-            xs = [p[0] for p in positions]
-            ys = [p[1] for p in positions]
-            hpwl = (max(xs) - min(xs)) + (max(ys) - min(ys))
-            net_hpwls[net_name] = hpwl
-        
-        return net_hpwls
-    
-    def plot(self, figsize=(14, 10), save_to=None):
+                    ix, iy = self.parser.ios[terminal]
+                    x_min, x_max = min(x_min, ix), max(x_max, ix)
+                    y_min, y_max = min(y_min, iy), max(y_max, iy)
+
+            self.bboxes[net_name] = (x_min, x_max, y_min, y_max)
+            self.net_hpwl[net_name] = (x_max - x_min) + (y_max - y_min)
+
+            # cells x in [ceil(x_min), x_max) -> slice end is ceil(x_max)
+            xs, xe = max(0, math.ceil(x_min)), min(self.C, math.ceil(x_max))
+            ys, ye = max(0, math.ceil(y_min)), min(self.R, math.ceil(y_max))
+            if xs < xe and ys < ye:
+                self.U[xs:xe, ys:ye] += 1
+
+    @property
+    def hpwl(self):
+        return sum(self.net_hpwl.values())
+
+    @property
+    def cc(self):
+        total = self.U.sum()
+        return self.U.size * float((self.U.astype(np.float64) ** 2).sum()) / float(total) ** 2
+
+    @property
+    def U_norm(self):
+        """Coverage map divided by its mean: 1 = average, CC - 1 = variance of this map"""
+        return self.U / self.U.mean()
+
+
+def style_axes(ax):
+    for spine in ax.spines.values():
+        spine.set_color(GRID_COLOR)
+    ax.tick_params(colors=TEXT_SECONDARY, labelsize=9)
+    ax.xaxis.label.set_color(TEXT_SECONDARY)
+    ax.yaxis.label.set_color(TEXT_SECONDARY)
+
+
+class FPGAPlotter:
+    def __init__(self, metrics, show_io_names=True, show_block_names=False, net_mode='density'):
         """
-        Generate and display the placement plot
-        
+        Initialize plotter for one placement
+
         Args:
-            figsize: Tuple of (width, height) for figure
-            save_to: Path to save the figure (optional)
+            metrics: PlacementMetrics instance
+            show_io_names: Whether to label IO pins
+            show_block_names: Whether to label blocks
+            net_mode: How to visualize nets ('density', 'cc', 'bboxes', 'lines', 'hpwl', 'none')
         """
-        fig, ax = plt.subplots(figsize=figsize)
-        
-        # Draw grid
+        self.metrics = metrics
+        self.parser = metrics.parser
+        self.show_io_names = show_io_names
+        self.show_block_names = show_block_names
+        self.net_mode = net_mode
+
+    def plot(self, ax, norm, title):
+        """
+        Draw the placement onto ax
+
+        Args:
+            ax: Matplotlib axes to draw into
+            norm: Color normalization shared with the other placement (None for 'bboxes'/'lines'/'none')
+            title: Axes title
+        Returns:
+            A mappable for the shared colorbar, or None
+        """
+        mappable = self._draw_nets(ax, norm)
         self._draw_grid(ax)
-        
-        # Draw IOs
-        self._draw_ios(ax)
-        
-        # Draw nets (if enabled)
-        if self.show_nets:
-            self._draw_nets(ax)
-        
-        # Draw blocks
         self._draw_blocks(ax)
-        
-        # Set axis properties
-        ax.set_xlim(-1, self.parser.C + 1)
-        ax.set_ylim(-1, self.parser.R + 1)
+        self._draw_ios(ax)
+
+        pad = 1.0
+        ax.set_xlim(-pad, self.metrics.C + pad)
+        ax.set_ylim(self.metrics.R + pad, -pad)  # y grows downward, matching grid coordinates
         ax.set_aspect('equal')
-        ax.invert_yaxis()  # Match typical grid coordinates
-        
-        ax.set_xlabel('X Coordinate', fontsize=12)
-        ax.set_ylabel('Y Coordinate', fontsize=12)
-        ax.set_title(f'FPGA Placement (Grid: {self.parser.C}x{self.parser.R})', fontsize=14, fontweight='bold')
-        
-        ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
-        ax.set_axisbelow(True)
-        
-        if save_to:
-            fig.savefig(save_to, dpi=150, bbox_inches='tight')
-            print(f"Plot saved to {save_to}")
-        
-        plt.tight_layout()
-        return fig, ax
-    
+        ax.set_xlabel('X Coordinate')
+        ax.set_ylabel('Y Coordinate')
+        ax.set_title(title, fontsize=12, color=TEXT_PRIMARY, loc='left')
+        style_axes(ax)
+        return mappable
+
     def _draw_grid(self, ax):
-        """Draw the FPGA grid"""
-        for x in range(self.parser.C + 1):
-            ax.axvline(x - 0.5, color='gray', linewidth=0.5, alpha=0.2)
-        for y in range(self.parser.R + 1):
-            ax.axhline(y - 0.5, color='gray', linewidth=0.5, alpha=0.2)
-    
+        """Draw the FPGA grid on cell boundaries"""
+        C, R = self.metrics.C, self.metrics.R
+        lw = 0.4 if max(C, R) <= 40 else 0.2
+        segments = [[(x, 0), (x, R)] for x in range(C + 1)] + [[(0, y), (C, y)] for y in range(R + 1)]
+        ax.add_collection(LineCollection(segments, colors=GRID_COLOR, linewidths=lw, zorder=2))
+
     def _draw_blocks(self, ax):
-        """Draw logic blocks"""
-        for block_name, (x, y) in self.parser.blocks.items():
-            # Draw block as a square
-            rect = patches.Rectangle((x - 0.4, y - 0.4), 0.8, 0.8, 
-                                     linewidth=2, edgecolor='blue', 
-                                     facecolor='lightblue', alpha=0.7)
-            ax.add_patch(rect)
-            
-            # Add label
-            if self.show_block_names:
-                ax.text(x, y, block_name[:8], ha='center', va='center', 
-                       fontsize=8, fontweight='bold', color='darkblue')
-    
+        """Draw logic blocks as outlines only, so the coloring underneath stays visible"""
+        rects = [patches.Rectangle((x + 0.12, y + 0.12), 0.76, 0.76)
+                 for x, y in self.parser.blocks.values()]
+        lw = 0.8 if max(self.metrics.C, self.metrics.R) <= 40 else 0.4
+        ax.add_collection(PatchCollection(rects, facecolor='none', edgecolor=TEXT_PRIMARY,
+                                          linewidths=lw, alpha=0.55, zorder=3))
+        if self.show_block_names:
+            for block_name, (x, y) in self.parser.blocks.items():
+                ax.text(x + 0.5, y + 0.5, block_name[:8], ha='center', va='center',
+                        fontsize=6, color=TEXT_PRIMARY, zorder=4)
+
     def _draw_ios(self, ax):
-        """Draw IO pins"""
-        for io_name, (x, y) in self.parser.ios.items():
-            # Draw IO as a circle
-            circle = patches.Circle((x, y), 0.2, linewidth=2, 
-                                   edgecolor='red', facecolor='lightcoral', alpha=0.8)
-            ax.add_patch(circle)
-            
-            # Add label
-            if self.show_io_names:
-                offset_x = 0.4 if x < self.parser.C / 2 else -0.4
-                offset_y = 0.4 if y < self.parser.R / 2 else -0.4
-                ax.text(x + offset_x, y + offset_y, io_name, ha='center', va='center',
-                       fontsize=7, color='darkred', bbox=dict(boxstyle='round,pad=0.3', 
-                       facecolor='white', alpha=0.7, edgecolor='none'))
-    
-    def _draw_nets(self, ax):
-        """Draw net connections based on selected mode"""
+        """Draw IO pins on the boundary"""
+        xs = [p[0] for p in self.parser.ios.values()]
+        ys = [p[1] for p in self.parser.ios.values()]
+        ax.scatter(xs, ys, s=22, marker='s', color=TEXT_PRIMARY, edgecolors='white',
+                   linewidths=0.6, zorder=5)
+        if self.show_io_names and len(self.parser.ios) <= 32:  # labels overlap on larger designs
+            C, R = self.metrics.C, self.metrics.R
+            for io_name, (x, y) in self.parser.ios.items():
+                dx = -0.6 if x <= 0 else (0.6 if x >= C else 0)
+                dy = -0.6 if y <= 0 else (0.6 if y >= R else 0)
+                ax.text(x + dx, y + dy, io_name, ha='center', va='center', fontsize=6,
+                        color=TEXT_SECONDARY, zorder=5)
+
+    def _draw_nets(self, ax, norm):
+        """Draw net information based on selected mode"""
         if self.net_mode == 'density':
-            self._draw_nets_density(ax)
-        elif self.net_mode == 'bboxes':
+            return self._draw_heatmap(ax, self.metrics.U, SEQUENTIAL, norm)
+        if self.net_mode == 'cc':
+            return self._draw_heatmap(ax, self.metrics.U_norm, DIVERGING, norm)
+        if self.net_mode == 'hpwl':
+            return self._draw_nets_hpwl(ax, norm)
+        if self.net_mode == 'bboxes':
             self._draw_nets_bboxes(ax)
         elif self.net_mode == 'lines':
             self._draw_nets_lines(ax)
-        elif self.net_mode == 'hpwl':
-            self._draw_nets_hpwl(ax)
-    
-    def _draw_nets_density(self, ax):
-        """Draw net density heatmap"""
-        # Create density map
-        density_map = np.zeros((int(self.parser.R), int(self.parser.C)))
-        
-        for net_name, terminals in self.parser.nets.items():
-            # Get positions of all terminals
-            positions = []
-            for terminal in terminals:
-                if terminal in self.parser.blocks:
-                    positions.append(self.parser.blocks[terminal])
-                elif terminal in self.parser.ios:
-                    positions.append(self.parser.ios[terminal])
-            
-            if len(positions) < 2:
-                continue
-            
-            # Calculate bounding box for this net
-            xs = [p[0] for p in positions]
-            ys = [p[1] for p in positions]
-            min_x, max_x = min(xs), max(xs)
-            min_y, max_y = min(ys), max(ys)
-            
-            # Mark cells covered by this net
-            x_start = max(0, int(np.floor(min_x)))
-            x_end = min(int(self.parser.C), int(np.ceil(max_x)) + 1)
-            y_start = max(0, int(np.floor(min_y)))
-            y_end = min(int(self.parser.R), int(np.ceil(max_y)) + 1)
-            
-            density_map[y_start:y_end, x_start:x_end] += 1
-        
-        # Plot heatmap
-        im = ax.imshow(density_map, cmap='YlOrRd', alpha=0.5, 
-                       extent=[-0.5, self.parser.C - 0.5, self.parser.R - 0.5, -0.5],
-                       aspect='auto', interpolation='bilinear')
-        
-        # Add colorbar
-        cbar = plt.colorbar(im, ax=ax, label='Net Density')
-    
+        return None
+
+    def _draw_heatmap(self, ax, grid, cmap, norm):
+        """Draw a per-cell map; grid is indexed [x][y] and cell (x, y) spans [x, x+1] x [y, y+1]"""
+        return ax.imshow(grid.T, cmap=cmap, norm=norm, origin='upper', interpolation='nearest',
+                         extent=[0, self.metrics.C, self.metrics.R, 0], zorder=1)
+
     def _draw_nets_bboxes(self, ax):
         """Draw bounding boxes for each net"""
-        colors = plt.cm.tab20(np.linspace(0, 1, min(20, len(self.parser.nets))))
-        
-        for net_idx, (net_name, terminals) in enumerate(self.parser.nets.items()):
-            if len(terminals) < 2:
-                continue
-            
-            # Get positions of all terminals
-            positions = []
-            for terminal in terminals:
-                if terminal in self.parser.blocks:
-                    positions.append(self.parser.blocks[terminal])
-                elif terminal in self.parser.ios:
-                    positions.append(self.parser.ios[terminal])
-            
-            if len(positions) < 2:
-                continue
-            
-            # Calculate bounding box
-            xs = [p[0] for p in positions]
-            ys = [p[1] for p in positions]
-            min_x, max_x = min(xs), max(xs)
-            min_y, max_y = min(ys), max(ys)
-            
-            width = max_x - min_x + 1
-            height = max_y - min_y + 1
-            
-            color = colors[net_idx % len(colors)]
-            rect = patches.Rectangle((min_x - 0.5, min_y - 0.5), width, height,
-                                    linewidth=0.5, edgecolor=color, facecolor='none',
-                                    alpha=0.4)
-            ax.add_patch(rect)
-    
+        rects = [patches.Rectangle((x0, y0), x1 - x0, y1 - y0)
+                 for x0, x1, y0, y1 in self.metrics.bboxes.values()]
+        ax.add_collection(PatchCollection(rects, facecolor='none', edgecolor=COLOR_FINAL,
+                                          linewidths=0.6, alpha=0.3, zorder=1))
+
     def _draw_nets_lines(self, ax):
-        """Draw net connections as radial lines (original method)"""
-        colors = plt.cm.tab20(np.linspace(0, 1, len(self.parser.nets)))
-        
-        for net_idx, (net_name, terminals) in enumerate(self.parser.nets.items()):
-            if len(terminals) < 2:
-                continue
-            
-            # Get positions of all terminals
-            positions = []
+        """Draw net connections as star lines from each terminal to the net centroid"""
+        segments = []
+        for terminals in self.parser.nets.values():
+            points = []
             for terminal in terminals:
                 if terminal in self.parser.blocks:
-                    positions.append(self.parser.blocks[terminal])
+                    bx, by = self.parser.blocks[terminal]
+                    points.append((bx + 0.5, by + 0.5))
                 elif terminal in self.parser.ios:
-                    positions.append(self.parser.ios[terminal])
-            
-            if len(positions) < 2:
+                    points.append(self.parser.ios[terminal])
+            if len(points) < 2:
                 continue
-            
-            # Draw Steiner tree (simple: connect all to centroid)
-            color = colors[net_idx % len(colors)]
-            
-            # Calculate centroid
-            cx = sum(p[0] for p in positions) / len(positions)
-            cy = sum(p[1] for p in positions) / len(positions)
-            
-            # Draw lines from each terminal to centroid
-            for px, py in positions:
-                ax.plot([px, cx], [py, cy], color=color, alpha=0.3, linewidth=0.8)
-        
-        # Add legend (sample of nets)
-        num_nets_to_show = min(5, len(self.parser.nets))
-        legend_elements = [patches.Patch(facecolor=colors[i % len(colors)], 
-                                        alpha=0.3, label=f'Nets...')
-                          for i in range(num_nets_to_show)]
-        ax.legend(handles=legend_elements, loc='upper right', fontsize=9)
-    
-    def _draw_nets_hpwl(self, ax):
-        """Draw nets colored by HPWL magnitude"""
-        # Calculate HPWL for all nets
-        net_hpwls = self._calculate_hpwl()
-        
-        if not net_hpwls:
-            return
-        
-        # Get max HPWL for normalization
-        max_hpwl = max(net_hpwls.values()) if net_hpwls else 1
-        
-        # Create colormap
-        cmap = plt.cm.RdYlGn_r  # Red (high) to Green (low)
-        
-        # Draw each net with color based on HPWL
-        for net_name, terminals in self.parser.nets.items():
-            if len(terminals) < 2:
-                continue
-            
-            # Get positions of all terminals
-            positions = []
-            for terminal in terminals:
-                if terminal in self.parser.blocks:
-                    positions.append(self.parser.blocks[terminal])
-                elif terminal in self.parser.ios:
-                    positions.append(self.parser.ios[terminal])
-            
-            if len(positions) < 2:
-                continue
-            
-            # Calculate bounding box
-            xs = [p[0] for p in positions]
-            ys = [p[1] for p in positions]
-            min_x, max_x = min(xs), max(xs)
-            min_y, max_y = min(ys), max(ys)
-            
-            # Get HPWL and normalize for color
-            hpwl = net_hpwls.get(net_name, 0)
-            color_intensity = hpwl / max_hpwl if max_hpwl > 0 else 0
-            color = cmap(color_intensity)
-            
-            # Draw bounding box
-            width = max_x - min_x + 1
-            height = max_y - min_y + 1
-            
-            rect = patches.Rectangle((min_x - 0.5, min_y - 0.5), width, height,
-                                    linewidth=1.0, edgecolor=color, facecolor='none',
-                                    alpha=0.6)
-            ax.add_patch(rect)
-        
-        # Add colorbar
-        sm = plt.cm.ScalarMappable(cmap=cmap, 
-                                   norm=plt.Normalize(vmin=0, vmax=max_hpwl))
-        sm.set_array([])
-        cbar = plt.colorbar(sm, ax=ax, label='HPWL (Half-Perimeter Wire Length)')
-    
+            cx = sum(p[0] for p in points) / len(points)
+            cy = sum(p[1] for p in points) / len(points)
+            segments.extend([[p, (cx, cy)] for p in points])
+        ax.add_collection(LineCollection(segments, colors=COLOR_FINAL, linewidths=0.6,
+                                         alpha=0.3, zorder=1))
+
+    def _draw_nets_hpwl(self, ax, norm):
+        """Draw net bounding boxes colored by HPWL, longest on top"""
+        items = sorted(self.metrics.net_hpwl.items(), key=lambda kv: kv[1])
+        rects, colors = [], []
+        for net_name, hpwl in items:
+            x0, x1, y0, y1 = self.metrics.bboxes[net_name]
+            rects.append(patches.Rectangle((x0, y0), x1 - x0, y1 - y0))
+            colors.append(SEQUENTIAL(norm(hpwl)))
+        ax.add_collection(PatchCollection(rects, facecolor='none', edgecolors=colors,
+                                          linewidths=0.8, alpha=0.7, zorder=1))
+        return plt.cm.ScalarMappable(cmap=SEQUENTIAL, norm=norm)
+
     def print_statistics(self):
         """Print placement statistics"""
         print("\n" + "="*60)
@@ -396,11 +317,13 @@ class FPGAPlotter:
         print(f"Number of Blocks: {len(self.parser.blocks)}")
         print(f"Number of IOs: {len(self.parser.ios)}")
         print(f"Number of Nets: {len(self.parser.nets)}")
-        
+        print(f"HPWL: {self.metrics.hpwl:.1f}")
+        print(f"CC: {self.metrics.cc:.6f}")
+
         # Calculate utilization
         utilization = (len(self.parser.blocks) / (self.parser.C * self.parser.R)) * 100
         print(f"Block Utilization: {utilization:.2f}%")
-        
+
         # Calculate bounding box
         if self.parser.blocks:
             block_coords = list(self.parser.blocks.values())
@@ -409,109 +332,144 @@ class FPGAPlotter:
             min_y = min(c[1] for c in block_coords)
             max_y = max(c[1] for c in block_coords)
             print(f"Block Bounding Box: ({min_x}, {min_y}) to ({max_x}, {max_y})")
-        
+
         print("="*60 + "\n")
+
+
+def shared_norm(mode, metrics_list):
+    """One color normalization covering every placement, so initial and final are comparable"""
+    if mode == 'density':
+        return Normalize(vmin=0, vmax=max(m.U.max() for m in metrics_list))
+    if mode == 'cc':
+        vmax = max(m.U_norm.max() for m in metrics_list)
+        return TwoSlopeNorm(vmin=0, vcenter=1, vmax=max(vmax, 1.01))
+    if mode == 'hpwl':
+        return Normalize(vmin=0, vmax=max(max(m.net_hpwl.values()) for m in metrics_list))
+    return None
+
+
+COLORBAR_LABELS = {
+    'density': 'U: net bounding boxes covering the cell   (shared scale)',
+    'cc': 'U / mean(U)   (1 = average; shared scale)',
+    'hpwl': 'Net HPWL   (shared scale)',
+}
+MODE_TITLES = {
+    'density': 'Net density U',
+    'cc': 'Congestion: U / mean(U)',
+    'hpwl': 'Net bounding boxes by HPWL',
+    'bboxes': 'Net bounding boxes',
+    'lines': 'Net connections',
+    'none': 'Placement',
+}
+
+
+def plot_placements(placements, mode, case_name, save_to, show_io_names, show_block_names, figsize):
+    """
+    Plot one or more placements side by side on one shared color scale
+
+    Args:
+        placements: list of (label, PlacementMetrics)
+        mode: Net visualization mode
+        case_name: Shown in the figure title
+        save_to: Path to save the figure (None to show it)
+    """
+    fig, axes = plt.subplots(1, len(placements), figsize=figsize, layout='constrained', squeeze=False)
+    axes = axes[0]
+    norm = shared_norm(mode, [m for _, m in placements])
+
+    mappable = None
+    for ax, (label, metrics) in zip(axes, placements):
+        plotter = FPGAPlotter(metrics, show_io_names=show_io_names,
+                              show_block_names=show_block_names, net_mode=mode)
+        title = f"{label}: HPWL = {metrics.hpwl:,.0f},  CC = {metrics.cc:.4f}"
+        mappable = plotter.plot(ax, norm, title)
+
+    if mappable is not None:
+        cbar = fig.colorbar(mappable, ax=list(axes), shrink=0.85, pad=0.01)
+        cbar.set_label(COLORBAR_LABELS[mode], color=TEXT_SECONDARY)
+        cbar.ax.tick_params(colors=TEXT_SECONDARY, labelsize=9)
+        if mode == 'cc':
+            cbar.ax.axhline(1.0, color=TEXT_PRIMARY, linewidth=1)
+
+    first, last = placements[0][1], placements[-1][1]
+    grid = f"Grid: {first.C}x{first.R}"
+    fig.suptitle(f"{case_name}: {MODE_TITLES[mode]}   ({grid})", fontsize=14, fontweight='bold',
+                 color=TEXT_PRIMARY, x=0.01, y=1.03, ha='left')
+
+    if save_to:
+        Path(save_to).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_to, dpi=150, bbox_inches='tight', facecolor='white')
+        print(f"Plot saved to {save_to}")
+        plt.close(fig)
+    else:
+        plt.show()
+
+
+def load_placements(input_file, output_file):
+    """Return [(label, PlacementMetrics)] for the initial (if found) and final placement"""
+    placements = []
+    if output_file:
+        init_file = f"{Path(output_file).with_suffix('')}_init.txt"
+        if Path(init_file).exists():
+            placements.append(('Initial', PlacementMetrics(FPGAPlacementParser(input_file, init_file))))
+        else:
+            print(f"Warning: initial placement file not found at {init_file}; plotting final only")
+        placements.append(('Final', PlacementMetrics(FPGAPlacementParser(input_file, output_file))))
+    else:
+        placements.append(('Unplaced', PlacementMetrics(FPGAPlacementParser(input_file))))
+    return placements
 
 
 def main():
     parser_args = argparse.ArgumentParser(
-        description='FPGA Placement Visualizer',
+        description='FPGA Placement Visualizer: initial and final placement side by side on a shared scale',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
-  # Plot final placement with density heatmap
-  python plot_placement.py testcases/alu4.txt result/alu4.out --mode density
-  
-  # Plot both initial and final placements
-  python plot_placement.py testcases/alu4.txt result/alu4.out --both --mode density
-  
-  # Plot with bounding boxes instead of density
-  python plot_placement.py testcases/alu4.txt result/alu4.out --mode bboxes
-  
-  # Plot with HPWL-based coloring (red=long, green=short)
+  # Net density (U), initial | final, shared color scale
+  python plot_placement.py testcases/alu4.txt result/alu4.out --mode density --save plot/alu4_density.png
+
+  # Congestion map U / mean(U), centered at 1 (CC = 1 + var of this map)
+  python plot_placement.py testcases/alu4.txt result/alu4.out --mode cc --save plot/alu4_cc.png
+
+  # Net bounding boxes colored by HPWL (red=long)
   python plot_placement.py testcases/alu4.txt result/alu4.out --mode hpwl
-  
-  # Plot without nets
+
+  # Blocks only
   python plot_placement.py testcases/alu4.txt result/alu4.out --mode none
         ''')
-    
+
     parser_args.add_argument('input', help='Input testcase file')
-    parser_args.add_argument('output', nargs='?', help='Output placement file (optional)')
-    parser_args.add_argument('--save', help='Save plot to file (or directory if --both)')
-    parser_args.add_argument('--both', action='store_true', 
-                            help='Plot both initial and final placements')
-    parser_args.add_argument('--mode', choices=['density', 'bboxes', 'lines', 'hpwl', 'none'],
-                            default='density', help='Net visualization mode')
-    parser_args.add_argument('--no-io-names', action='store_true', help='Do not label IOs')
+    parser_args.add_argument('output', nargs='?',
+                             help='Output placement file; its <name>_init.txt is plotted alongside it')
+    parser_args.add_argument('--save', help='Save the figure to this file')
+    parser_args.add_argument('--mode', choices=['density', 'cc', 'bboxes', 'lines', 'hpwl', 'none'],
+                             default='density', help='Net visualization mode')
+    parser_args.add_argument('--no-io-names', action='store_true',
+                             help='Do not label IOs (always off when there are more than 32 IOs)')
     parser_args.add_argument('--show-block-names', action='store_true', help='Label blocks with names')
-    parser_args.add_argument('--figsize', type=float, nargs=2, default=[14, 10],
-                           help='Figure size (width height)')
-    
+    parser_args.add_argument('--figsize', type=float, nargs=2, default=[20, 9.5],
+                             help='Figure size (width height)')
+    parser_args.add_argument('--stats', action='store_true', help='Print placement statistics')
+
     args = parser_args.parse_args()
-    
-    # Validate arguments
-    if args.both and not args.output:
-        print("Error: --both requires both input and output files")
-        sys.exit(1)
-    
-    # Parse files
+
     try:
-        parser_final = FPGAPlacementParser(args.input, args.output) if args.output else None
-
-        # If an output file is provided, try to load the companion *_init.txt produced by main.cpp
-        init_output_path = None
-        if args.output:
-            base_no_ext = Path(args.output).with_suffix("")
-            init_output_path = f"{base_no_ext}_init.txt"
-            if not Path(init_output_path).exists():
-                print(f"Warning: initial placement file not found at {init_output_path}; falling back to unplaced blocks")
-                init_output_path = None
-
-        parser_initial = FPGAPlacementParser(args.input, init_output_path)
+        placements = load_placements(args.input, args.output)
     except FileNotFoundError as e:
         print(f"Error: {e}")
         sys.exit(1)
-    
-    # Determine what to plot
-    to_plot = []
-    if args.both and parser_final:
-        to_plot.append(('Initial', parser_initial))
-        to_plot.append(('Final', parser_final))
-    elif parser_final:
-        to_plot.append(('Final', parser_final))
-    else:
-        to_plot.append(('Initial', parser_initial))
-    
-    # Plot each
-    for plot_type, parser in to_plot:
-        plotter = FPGAPlotter(
-            parser,
-            show_nets=args.mode != 'none',
-            show_io_names=not args.no_io_names,
-            show_block_names=args.show_block_names,
-            net_mode=args.mode
-        )
-        
-        # Print statistics
-        print(f"\n{plot_type.upper()} PLACEMENT:")
-        plotter.print_statistics()
-        
-        # Determine output file
-        output_file = None
-        if args.save:
-            if args.both:
-                # Save to directory with type in filename
-                output_file = f"{args.save.rstrip('/')}/{plot_type.lower()}_placement.png"
-            else:
-                output_file = args.save
-        
-        # Plot
-        fig, ax = plotter.plot(figsize=tuple(args.figsize), save_to=output_file)
-        
-        if not args.save:
-            plt.show()
-        else:
-            plt.close(fig)
+
+    if args.stats:
+        for label, metrics in placements:
+            print(f"\n{label.upper()} PLACEMENT:")
+            FPGAPlotter(metrics).print_statistics()
+
+    case_name = Path(args.output or args.input).stem
+    plot_placements(placements, args.mode, case_name, args.save,
+                    show_io_names=not args.no_io_names,
+                    show_block_names=args.show_block_names,
+                    figsize=tuple(args.figsize))
 
 
 if __name__ == '__main__':

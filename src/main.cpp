@@ -4,6 +4,7 @@
 using namespace std;
 #define DEBUG_MAIN 1
 #define PLOT_INIT 1
+#define SA_TRACE 1 // write <outfileBase>_trace.csv with one row per temperature step
 
 void parser(string filename);
 
@@ -29,6 +30,9 @@ int main(int argc, char* argv[]) {
     DEBUG_MSG("Outputting initial placement to " + initOutfile, DEBUG_MAIN);
     solver.output(initOutfile);
     DEBUG_MSG("Initial placement output finished.", DEBUG_MAIN);
+
+    if(SA_TRACE)
+        solver.openTrace(outfileBase + "_trace.csv");
 
     DEBUG_MSG("Starting Simulated Annealing optimization...", DEBUG_MAIN);
     for(int i=0; i<5; ++i)

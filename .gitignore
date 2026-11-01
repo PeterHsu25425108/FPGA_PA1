@@ -6,3 +6,4 @@ obj/
 result/
 submission/
 plot/
+__pycache__/

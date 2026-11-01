@@ -19,6 +19,19 @@ double coolRate(double acceptRate)
         return 0.9;
 }
 
+void Solver::openTrace(string filename){
+    trace_file.open(filename);
+    trace_file << "round,iter,time,T,accept_rate,HPWL,CC,best_HPWL,best_CC,T0\n";
+}
+
+void Solver::writeTrace(double temp, double acceptRate){
+    if(!trace_file.is_open()) return;
+    double elapsed_secs = double(clock() - prog_start_time) / CLOCKS_PER_SEC;
+    trace_file << sa_round << "," << trace_iter << "," << elapsed_secs << "," << temp << ","
+               << acceptRate << "," << prev_wirelength << "," << prev_CC << ","
+               << total_wirelength << "," << CC << "," << initialTemp << "\n";
+}
+
 #define DEBUG_SA 1
 void Solver::SA_optimize(int max_iterations){
 
@@ -29,6 +42,8 @@ void Solver::SA_optimize(int max_iterations){
     
     
     T = initialTemp;
+    sa_round++;
+    writeTrace(T, 1.0);
     while(true){
         // early stop mechanism
         prog_end_time = clock();
@@ -39,6 +54,7 @@ void Solver::SA_optimize(int max_iterations){
         }
 
         iter++;
+        trace_iter++;
         PROF_TIMER_ON(DEBUG_SA);
         // pertubation
         // pick a random block and a random target position
@@ -61,6 +77,7 @@ void Solver::SA_optimize(int max_iterations){
         // After every changeTempIter iterations, update temperature
         if(iter % changeTempIter == 0){
             double acceptRate = static_cast<double>(acceptCount) / changeTempIter;
+            writeTrace(T, acceptRate); // T and accept rate of the step that just finished
             coolingRate = coolRate(acceptRate);
             T *= coolingRate;
             acceptCount = 0; // reset accept count for next temperature phase
