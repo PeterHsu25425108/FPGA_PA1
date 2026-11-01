@@ -48,7 +48,8 @@ void Solver::writeTrace(double temp, double acceptRate){
 #endif
 
 // A round ends early once the move range is down to 1 and the cost has not improved by more
-// than STALL_TOL (relative) for STALL_STEPS temperature steps. Set STALL_STEPS to 0 to disable.
+// than STALL_TOL (relative) for STALL_STEPS temperature steps, measured from the point where the
+// move range first reached 1. Set STALL_STEPS to 0 to disable.
 #ifndef STALL_STEPS
 #define STALL_STEPS 20
 #endif
@@ -185,8 +186,10 @@ void Solver::SA_optimize(int max_iterations){
     }
     T = roundStartTemp;
 
-    // lowest cost seen in this round; starts empty so a reheated round is judged on its own descent
+    // lowest cost seen in the local phase of this round (since the move range first reached 1);
+    // a reheated round first gets worse, so earlier costs must not count as the reference
     double roundBestCost = numeric_limits<double>::infinity();
+    bool localPhase = false;
     int stallSteps = 0;
     writeTrace(T, 1.0);
     while(true){
@@ -256,7 +259,12 @@ void Solver::SA_optimize(int max_iterations){
 
             // end the round once it stops improving in the local phase
             double cost = normCost(prev_wirelength, prev_CC);
-            if(cost < roundBestCost * (1 - STALL_TOL)){
+            if(!localPhase && rangeLimit <= 1.0){
+                localPhase = true;
+                roundBestCost = cost;
+                stallSteps = 0;
+            }
+            else if(cost < roundBestCost * (1 - STALL_TOL)){
                 roundBestCost = cost;
                 stallSteps = 0;
             }
