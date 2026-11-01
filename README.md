@@ -30,10 +30,9 @@ Where:
 
 **Parameter values used:**
 - Initial temperature $T_0 = 800,000$
-- Cooling interval: every 30,000 iterations (changed from 1,000)
+- Cooling interval: every 5,000 iterations
 - Cooling rates: $0.9$ (acceptance rate $>0.95$), $0.99$ ($>0.8$), $0.99$ ($>0.15$), $0.9$ (otherwise)
-- Temperature threshold: $T < 1e-6$ for termination
-- Termination: after 235 seconds
+- Termination: when $T < 10^{-3}$, with a safety time limit of 235 seconds
 
 
 
@@ -61,8 +60,8 @@ else
 T = T * coolingRate;
 ```
 
-- This means that if the system is accepting many moves (high accept rate), the temperature drops quickly to encourage convergence. If the system is stuck (low accept rate), the temperature cools more slowly to allow more exploration.
-- The process terminates after a fixed time limit (235 seconds).
+- This means the temperature drops quickly ($\times 0.9$) at both ends: when almost every move is accepted (accept rate $>0.95$, the placement is still random), and when almost every move is rejected (accept rate $\le 0.15$, the placement is frozen). In between, where most of the useful optimization happens, it cools slowly ($\times 0.99$).
+- The process terminates when $T < 10^{-3}$. A time limit of 235 seconds is kept as a safety net, but the test cases finish well before it.
 
 ## 4. Fast Incremental Updates for Nets, U, and Congestion Costs
 To achieve high performance, the code uses several incremental update techniques:
