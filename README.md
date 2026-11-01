@@ -8,11 +8,11 @@ This project implements a simulated annealing (SA) based placer for FPGA logic b
 ### Performance Summary
 | Case Name | Initial Wirelength | Final Wirelength | Initial CC | Final CC | Net count | IO count | Block count |
 |-----------|--------------------|------------------|------------|----------|-----------|----------|-------------|
-|   alu4    |    5952.000000     |   2655.000000    |  1.607460  | 1.065947 |    222    |    16    |     475     |
-|   apex4   |    7803.000000     |   3954.000000    |  1.693350  | 1.042499 |    335    |    16    |     411     |
-|  clma_2   |    95364.000000    |   41661.000000   |  1.650540  | 1.029874 |   1559    |    61    |    3580     |
-| elliptic  |    15920.000000    |   5752.000000    |  1.407780  | 1.035103 |    467    |   128    |     968     |
-|    pdc    |    37012.000000    |   17811.000000   |  1.660340  | 1.042976 |    784    |    34    |    1513     |
+|   alu4    |    5952.000000     |   2472.000000    |  1.607460  | 1.071977 |    222    |    16    |     475     |
+|   apex4   |    7803.000000     |   3738.000000    |  1.693350  | 1.039691 |    335    |    16    |     411     |
+|  clma_2   |    95364.000000    |   24731.000000   |  1.650540  | 1.027099 |   1559    |    61    |    3580     |
+| elliptic  |    15920.000000    |   4895.000000    |  1.407780  | 1.040439 |    467    |   128    |     968     |
+|    pdc    |    37012.000000    |   14512.000000   |  1.660340  | 1.045569 |    784    |    34    |    1513     |
 
 
 
@@ -35,10 +35,11 @@ $\Delta\text{Cost}$ is the step of $S \cdot \ln(\text{HPWL} \cdot \text{CC})$, s
 
 **Parameter values used:**
 - SA rounds: 5
-- Initial temperature: $T_0 = 800{,}000$ for round 1; each later round starts at $0.66\times$ the previous round's initial temperature
+- Initial temperature: $T_0 = 800{,}000$ for round 1; round 2 starts at $T_\text{reheat}$ (see Section 3), and each later round at $0.66\times$ the previous round's initial temperature
+- Move range: adaptive $R_\text{limit}$ with a target acceptance rate of $0.44$; round 1 starts with the whole chip, rounds 2+ with half of it
 - Cooling interval: every 5,000 iterations
 - Cooling rates: $0.9$ (acceptance rate $>0.95$), $0.99$ ($>0.8$), $0.99$ ($>0.15$), $0.9$ (otherwise)
-- Termination: each round ends when $T < 10^{-3}$, with a safety time limit of 235 seconds for the whole run
+- Termination: a round ends when $T < 10^{-3}$, or early once $R_\text{limit} = 1$ and $\text{HPWL} \cdot \text{CC}$ has not improved by more than $0.01\%$ for 20 temperature steps; a safety time limit of 235 seconds applies to the whole run
 
 
 
@@ -49,7 +50,17 @@ The temperature schedule is adaptive and dynamically controlled based on the acc
 
 **Initialization and rounds:**
 - The initial temperature $T_0$ is set to a high value (800,000) to allow broad exploration.
-- SA runs for 5 rounds. Each round continues from the placement left by the previous round and reheats to $0.66\times$ the previous round's initial temperature ($800{,}000 \to 528{,}000 \to 348{,}480 \to 229{,}997 \to 151{,}798$), so later rounds explore less and refine more.
+- SA runs for 5 rounds. Each round continues from the placement left by the previous round.
+- During round 1, the temperature at which $R_\text{limit}$ first shrinks to half of the chip is recorded as $T_\text{reheat}$; this is where moves turn from global to local. Rounds 2+ restart from there instead of from $T_0$, so they refine the round-1 placement rather than scramble it:
+
+| Round | Initial $T$ | Initial $R_\text{limit}$ |
+|-------|-------------|---------------------------|
+| 1 | $T_0 = 800{,}000$ | whole chip, $\max(C, R)$ |
+| $k \ge 2$ | $T_\text{reheat} \times 0.66^{k-2}$ | $0.5 \times \max(C, R)$ |
+
+**Range-limited moves:**
+- A move picks a random block and a random target site within $\pm R_\text{limit}$ of the block (a square window clipped to the chip). If the site is occupied, the two blocks are swapped.
+- Every temperature step, $R_\text{limit} \leftarrow R_\text{limit} \times (1 - 0.44 + \text{acceptRate})$, clamped to $[1, \max(C, R)]$. This keeps the acceptance rate near $44\%$ (as in VPR): the window shrinks once most far moves get rejected, so late moves stay local and are far more likely to be accepted.
 
 **Cooling Schedule:**
 - Every 5000 iterations, the acceptance rate (ratio of accepted moves to attempted moves) is measured.
@@ -68,7 +79,8 @@ T = T * coolingRate;
 ```
 
 - This means the temperature drops quickly ($\times 0.9$) at both ends: when almost every move is accepted (accept rate $>0.95$, the placement is still random), and when almost every move is rejected (accept rate $\le 0.15$, the placement is frozen). In between, where most of the useful optimization happens, it cools slowly ($\times 0.99$).
-- A round ends when $T < 10^{-3}$. A time limit of 235 seconds for the whole run is kept as a safety net, but the test cases finish well before it (28 to 97 seconds for all 5 rounds).
+- **Early stop:** once $R_\text{limit} = 1$, a round is stopped when the current $\text{HPWL} \cdot \text{CC}$ has not improved on the lowest value seen in that round by more than $0.01\%$ for 20 temperature steps (100,000 iterations). Otherwise a round ends when $T < 10^{-3}$.
+- A time limit of 235 seconds for the whole run is kept as a safety net; the test cases finish well before it (14 to 40 seconds for all 5 rounds).
 
 ## 4. Fast Incremental Updates for Nets, U, and Congestion Costs
 To achieve high performance, the code uses several incremental update techniques:
@@ -148,7 +160,8 @@ The bounding box update uses anchor checks to determine when a boundary can chan
 ![Anchor check](docs/figures/anchor_check.png)
 
 ## 6. Visualization
-- With `SA_TRACE` enabled in `src/main.cpp` (on by default), the placer writes `<output>_trace.csv` next to the output file, with one row per temperature step: round, iteration, time, $T$, acceptance rate, and the current and best HPWL and CC.
+- With `SA_TRACE` enabled in `src/main.cpp` (on by default), the placer writes `<output>_trace.csv` next to the output file, with one row per temperature step: round, iteration, time, $T$, acceptance rate, the current and best HPWL and CC, the round's initial $T$, and $R_\text{limit}$.
+- The placer takes an optional random seed, `./placer <input> <output> [seed]` (default 1), and `python3 bench.py --out <dir>` runs all test cases with several seeds and reports the mean and standard deviation of HPWL, CC and $\text{HPWL} \cdot \text{CC}$ (`--compare <results.json>` compares two versions).
 - `./plot_all.sh` turns the results in `result/` into these plots in `plot/`:
 
 | Plot | Script | Content |
@@ -156,7 +169,7 @@ The bounding box update uses anchor checks to determine when a boundary can chan
 | `<case>_density.png` | `plot_placement.py --mode density` | Initial and final placement side by side, colored by $U$ on a shared scale |
 | `<case>_cc.png` | `plot_placement.py --mode cc` | Initial and final $U / \text{mean}(U)$ on a shared scale centered at 1 |
 | `<case>_hpwl.png` | `plot_metrics.py` | Per-net HPWL, initial vs final |
-| `<case>_sa.png` | `plot_sa.py` | HPWL, CC, cost, temperature and acceptance rate over the SA iterations |
+| `<case>_sa.png` | `plot_sa.py` | HPWL, CC, cost, temperature, acceptance rate and $R_\text{limit}$ over the SA iterations |
 | `summary.png` | `plot_metrics.py --all` | HPWL and excess congestion $\text{CC} - 1$ of all cases, final as a percentage of initial |
 
 - The diagrams in this report are generated by `python3 docs/make_diagrams.py` into `docs/figures/` (PNG and SVG).

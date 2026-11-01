@@ -43,8 +43,7 @@ int main(int argc, char* argv[]) {
     for(int i=0; i<5; ++i)
     {
         cout << "SA Optimization Round " << (i+1) << " ..." << endl;
-        solver.SA_optimize();
-        solver.setInitTemp(solver.getInitTemp() * 0.66);
+        solver.SA_optimize(); // the initial temperature of each round is set inside
     }
     DEBUG_MSG("SA optimization finished.", DEBUG_MAIN);
 

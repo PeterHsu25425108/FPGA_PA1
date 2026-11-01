@@ -101,6 +101,8 @@ private:
     int sa_round = 0;
     long long int trace_iter = 0; // iterations accumulated over all SA rounds
     double rangeLimit = 0; // half-width of the window a block may move within
+    double roundStartTemp = 0; // initial temperature of the current round
+    double reheatTemp = -1; // temperature of round 1 where the move range turned local
     void writeTrace(double temp, double acceptRate);
 
     // indexing: [x][y] (the first dim is x-coordinate, which is column index)

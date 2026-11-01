@@ -5,6 +5,7 @@
 #include<vector>
 #include<cmath>
 #include<algorithm>
+#include<limits>
 using namespace std;
 
 double coolRate(double acceptRate)
@@ -29,13 +30,29 @@ void Solver::writeTrace(double temp, double acceptRate){
     double elapsed_secs = double(clock() - prog_start_time) / CLOCKS_PER_SEC;
     trace_file << sa_round << "," << trace_iter << "," << elapsed_secs << "," << temp << ","
                << acceptRate << "," << prev_wirelength << "," << prev_CC << ","
-               << total_wirelength << "," << CC << "," << initialTemp << "," << rangeLimit << "\n";
+               << total_wirelength << "," << CC << "," << roundStartTemp << "," << rangeLimit << "\n";
 }
 
 // Range-limited moves (VPR): the target is picked within +-rangeLimit of the block, and
 // rangeLimit adapts so that about 44% of the moves get accepted
 #define RANGE_LIMIT 1
 #define TARGET_ACCEPT_RATE 0.44
+
+// Each round starts at ROUND_TEMP_RATIO times the previous round's initial temperature.
+// Rounds 2+ resume from the point of round 1 where the move range had shrunk to
+// REHEAT_R_FRAC of the chip (moves turn local there), instead of reheating to round 1's T0.
+// Set REHEAT_R_FRAC to 0 to reheat from round 1's T0.
+#define ROUND_TEMP_RATIO 0.66
+#ifndef REHEAT_R_FRAC
+#define REHEAT_R_FRAC 0.5
+#endif
+
+// A round ends early once the move range is down to 1 and HPWL*CC has not improved by more
+// than STALL_TOL (relative) for STALL_STEPS temperature steps. Set STALL_STEPS to 0 to disable.
+#ifndef STALL_STEPS
+#define STALL_STEPS 20
+#endif
+#define STALL_TOL 1e-4
 
 #define DEBUG_SA 1
 void Solver::SA_optimize(int max_iterations){
@@ -46,9 +63,23 @@ void Solver::SA_optimize(int max_iterations){
     int acceptCount = 0; // count of consecutive rejections within current temperature
     
     
-    T = initialTemp;
-    rangeLimit = max(C, R); // every round starts with the whole chip as the move range
     sa_round++;
+    double chipSize = max(C, R);
+    double reheatRange = max(1.0, REHEAT_R_FRAC * chipSize);
+    if(sa_round == 1 || reheatTemp <= 0){
+        // round 1 (or no reheat point recorded): whole chip, from initialTemp
+        roundStartTemp = sa_round == 1 ? initialTemp : roundStartTemp * ROUND_TEMP_RATIO;
+        rangeLimit = chipSize;
+    }
+    else{
+        roundStartTemp = reheatTemp * pow(ROUND_TEMP_RATIO, sa_round - 2);
+        rangeLimit = reheatRange;
+    }
+    T = roundStartTemp;
+
+    // lowest HPWL*CC seen in this round; starts empty so a reheated round is judged on its own descent
+    double roundBestCost = numeric_limits<double>::infinity();
+    int stallSteps = 0;
     writeTrace(T, 1.0);
     while(true){
         // early stop mechanism
@@ -102,9 +133,25 @@ void Solver::SA_optimize(int max_iterations){
             T *= coolingRate;
             if(RANGE_LIMIT){
                 rangeLimit *= 1.0 - TARGET_ACCEPT_RATE + acceptRate;
-                rangeLimit = min(max(rangeLimit, 1.0), static_cast<double>(max(C, R)));
+                rangeLimit = min(max(rangeLimit, 1.0), chipSize);
+                // remember where round 1 turned local, as the starting point of later rounds
+                if(sa_round == 1 && REHEAT_R_FRAC > 0 && reheatTemp <= 0 && rangeLimit <= reheatRange)
+                    reheatTemp = T;
             }
             acceptCount = 0; // reset accept count for next temperature phase
+
+            // end the round once it stops improving in the local phase
+            double cost = prev_wirelength * prev_CC;
+            if(cost < roundBestCost * (1 - STALL_TOL)){
+                roundBestCost = cost;
+                stallSteps = 0;
+            }
+            else if(rangeLimit <= 1.0){
+                stallSteps++;
+            }
+            if(STALL_STEPS > 0 && stallSteps >= STALL_STEPS){
+                break;
+            }
         }
         DEBUG_MSG("wirelength: " + to_string(total_wirelength) + ", CC: " + to_string(CC) + ", T: " + to_string(T), DEBUG_SA);
         PROF_TIMER_OFF("Iteration " + to_string(iter), DEBUG_SA);

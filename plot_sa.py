@@ -104,8 +104,8 @@ def plot_trace(case_name, trace, save_to):
     ax = axes[3]
     ax.semilogy(x, trace['T'], color=TEXT_PRIMARY, linewidth=1.5)
     t0_per_round = [trace['T0'][trace['round'] == k][0] for k in np.unique(trace['round'])]
-    ratio = f", ×{t0_per_round[1] / t0_per_round[0]:.2f} per round" if len(t0_per_round) > 1 else ""
-    ax.set_title(f"Temperature T   (T₀ = {t0_per_round[0]:,.0f}{ratio})", fontsize=12,
+    starts = ' → '.join(f"{t:,.0f}" for t in t0_per_round)
+    ax.set_title(f"Temperature T   (round initial T: {starts})", fontsize=12,
                  color=TEXT_PRIMARY, loc='left')
     finish_axes(ax, 'T (log)')
 
