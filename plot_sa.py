@@ -7,10 +7,11 @@ iterations of simulated annealing, from the <case>_trace.csv written by the plac
 The trace has one row per temperature step (every 5000 iterations).
 
 Cost function: SA_update.cpp accepts a move based on
-    dCost = costScale * (dHPWL / HPWL + dCC / CC),   costScale = 100 * (round 1 T0)
-which is the step of the potential costScale * ln(HPWL * CC). The plotted cost is the scale-free part,
-    ln(HPWL / HPWL_init) + ln(CC / CC_init),
-so 0 = initial placement, and every accepted move changes it by dCost / costScale.
+    dCost = costScale * (dHPWL / HPWL_init + dCC / CC_init),   costScale = 100 * (round 1 T0)
+which is the step of costScale * cost with cost = HPWL / HPWL_init + CC / CC_init. The cost panel
+plots how far the cost is above the final result, on a log axis,
+    cost / cost_final best - 1,
+so 0.01 means 1% above the final result, and small improvements in later rounds stay visible.
 """
 
 import argparse
@@ -60,8 +61,14 @@ def finish_axes(ax, ylabel):
 def plot_trace(case_name, trace, save_to):
     x = trace['iter'] / 1e6
     hpwl0, cc0 = trace['HPWL'][0], trace['CC'][0]
-    cost = np.log(trace['HPWL'] / hpwl0) + np.log(trace['CC'] / cc0)
-    best_cost = np.log(trace['best_HPWL'] / hpwl0) + np.log(trace['best_CC'] / cc0)
+    # cost = HPWL / HPWL_init + CC / CC_init; plotted as the relative gap above the final best,
+    # floored for the log axis
+    def norm_cost(hpwl, cc):
+        return hpwl / hpwl0 + cc / cc0
+    final_cost = norm_cost(trace['best_HPWL'][-1], trace['best_CC'][-1])
+    gap_floor = 1e-5
+    cost = np.maximum(norm_cost(trace['HPWL'], trace['CC']) / final_cost - 1, gap_floor)
+    best_cost = np.maximum(norm_cost(trace['best_HPWL'], trace['best_CC']) / final_cost - 1, gap_floor)
 
     has_range = 'R_limit' in trace
     ratios = [1, 1, 1, 0.8, 0.8] + ([0.8] if has_range else [])
@@ -92,13 +99,13 @@ def plot_trace(case_name, trace, save_to):
 
     # Cost function
     ax = axes[2]
-    ax.plot(x, cost, color='#6250d6', linewidth=1.2, label='current')
-    ax.plot(x, best_cost, color=COLOR_BEST, linewidth=2, label='best kept')
-    ax.axhline(0.0, color=TEXT_SECONDARY, linewidth=1, linestyle='--')
-    ax.set_title('Cost function   ln(HPWL / HPWL₀) + ln(CC / CC₀)    '
-                 '(ΔCost in SA = 100·T₀,round1 × Δ of this curve)', fontsize=12, color=TEXT_PRIMARY, loc='left')
+    ax.semilogy(x, cost, color='#6250d6', linewidth=1.2, label='current')
+    ax.semilogy(x, best_cost, color=COLOR_BEST, linewidth=2, label='best kept')
+    ax.set_ylim(bottom=gap_floor)
+    ax.set_title('Cost above final best   cost / cost_final − 1,   cost = HPWL / HPWL₀ + CC / CC₀    '
+                 '(0.01 = 1% above)', fontsize=12, color=TEXT_PRIMARY, loc='left')
     ax.legend(frameon=False, fontsize=9, loc='upper right')
-    finish_axes(ax, 'Cost')
+    finish_axes(ax, 'Cost gap (log)')
 
     # Temperature
     ax = axes[3]

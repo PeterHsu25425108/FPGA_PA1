@@ -47,7 +47,7 @@ void Solver::writeTrace(double temp, double acceptRate){
 #define REHEAT_R_FRAC 0.5
 #endif
 
-// A round ends early once the move range is down to 1 and HPWL*CC has not improved by more
+// A round ends early once the move range is down to 1 and the cost has not improved by more
 // than STALL_TOL (relative) for STALL_STEPS temperature steps. Set STALL_STEPS to 0 to disable.
 #ifndef STALL_STEPS
 #define STALL_STEPS 20
@@ -77,7 +77,7 @@ void Solver::SA_optimize(int max_iterations){
     }
     T = roundStartTemp;
 
-    // lowest HPWL*CC seen in this round; starts empty so a reheated round is judged on its own descent
+    // lowest cost seen in this round; starts empty so a reheated round is judged on its own descent
     double roundBestCost = numeric_limits<double>::infinity();
     int stallSteps = 0;
     writeTrace(T, 1.0);
@@ -141,7 +141,7 @@ void Solver::SA_optimize(int max_iterations){
             acceptCount = 0; // reset accept count for next temperature phase
 
             // end the round once it stops improving in the local phase
-            double cost = prev_wirelength * prev_CC;
+            double cost = normCost(prev_wirelength, prev_CC);
             if(cost < roundBestCost * (1 - STALL_TOL)){
                 roundBestCost = cost;
                 stallSteps = 0;

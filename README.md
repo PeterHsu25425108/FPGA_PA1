@@ -8,20 +8,34 @@ This project implements a simulated annealing (SA) based placer for FPGA logic b
 ### Performance Summary
 | Case Name | Initial Wirelength | Final Wirelength | Initial CC | Final CC | Net count | IO count | Block count |
 |-----------|--------------------|------------------|------------|----------|-----------|----------|-------------|
-|   alu4    |    5952.000000     |   2472.000000    |  1.607460  | 1.071977 |    222    |    16    |     475     |
-|   apex4   |    7803.000000     |   3738.000000    |  1.693350  | 1.039691 |    335    |    16    |     411     |
-|  clma_2   |    95364.000000    |   24731.000000   |  1.650540  | 1.027099 |   1559    |    61    |    3580     |
-| elliptic  |    15920.000000    |   4895.000000    |  1.407780  | 1.040439 |    467    |   128    |     968     |
-|    pdc    |    37012.000000    |   14512.000000   |  1.660340  | 1.045569 |    784    |    34    |    1513     |
+|   alu4    |    5952.000000     |   2543.000000    |  1.607460  | 1.042309 |    222    |    16    |     475     |
+|   apex4   |    7803.000000     |   3742.000000    |  1.693350  | 1.036010 |    335    |    16    |     411     |
+|  clma_2   |    95364.000000    |   25038.000000   |  1.650540  | 1.009621 |   1559    |    61    |    3580     |
+| elliptic  |    15920.000000    |   5189.000000    |  1.407780  | 1.018663 |    467    |   128    |     968     |
+|    pdc    |    37012.000000    |   14850.000000   |  1.660340  | 1.028675 |    784    |    34    |    1513     |
+
+### Comparison with the original version
+Performance is measured by the cost $\text{HPWL} / \text{HPWL}_\text{init} + \text{CC} / \text{CC}_\text{init}$ (Section 2; lower is better). Values are means over seeds 1 to 5 from `bench.py`; origin/main has no seed option, so its 5 runs are identical. Times are wall-clock seconds with 25 runs in parallel.
+
+| Case | origin/main cost | origin/main time | Range limit only cost | Range limit only time | Current cost | Current time |
+|------|------------------|------------------|-----------------------|-----------------------|--------------|--------------|
+| alu4 | 1.2384 | 36 s | 1.0766 (-13.1%) | 94 s | **1.0756** (-13.1%) | **20 s** |
+| apex4 | 1.2119 | 37 s | 1.0921 (-9.9%) | 107 s | **1.0923** (-9.9%) | **21 s** |
+| clma_2 | 1.1141 | 102 s | 0.9158 (-17.8%) | 162 s | **0.8750** (-21.5%) | **47 s** |
+| elliptic | 1.3309 | 48 s | 1.0514 (-21.0%) | 105 s | **1.0491** (-21.2%) | **23 s** |
+| pdc | 1.1488 | 77 s | 1.0278 (-10.5%) | 128 s | **1.0225** (-11.0%) | **36 s** |
+
+- The range-limited moves (Section 3) bring most of the cost reduction, but make each run 1.6 to 3 times longer than origin/main.
+- Restarting rounds 2+ colder and stopping a round once it stops improving (Section 3) remove that extra runtime: the current version is 3 to 5 times faster than range limit only, and also faster than origin/main, at an equal or lower cost.
 
 
 
 
 ## 2. Simulated Annealing Cost Function Design and Parameters
-Each move is evaluated by the cost change, which weighs the relative changes of total wirelength and congestion cost equally:
+Each move is evaluated by the cost change, with total wirelength and congestion cost both normalized by their values in the initial placement:
 
 $$
-	\Delta\text{Cost} = S \cdot \left( \frac{\Delta \text{HPWL}}{\text{HPWL}_\text{prev}} + \frac{\Delta \text{CC}}{\text{CC}_\text{prev}} \right)
+	\Delta\text{Cost} = S \cdot \left( \frac{\Delta \text{HPWL}}{\text{HPWL}_\text{init}} + \frac{\Delta \text{CC}}{\text{CC}_\text{init}} \right)
 $$
 
 Where:
@@ -29,9 +43,15 @@ Where:
 - $\text{CC} = N \cdot \sum U^2 / (\sum U)^2 = 1 + (\sigma_U / \mu_U)^2$ is the congestion cost of the cell coverage map $U$ over its $N$ cells, computed from the linear and quadratic sums of $U$. $\text{CC} = 1$ means perfectly uniform coverage.
 - $S = 100 \times 800{,}000$ is a fixed cost scale (100 times the first round's initial temperature). It does not change between rounds, so lowering the initial temperature of a later round really makes that round start colder.
 
-$\Delta\text{Cost}$ is the step of $S \cdot \ln(\text{HPWL} \cdot \text{CC})$, so the quantity being minimized is $\text{HPWL} \cdot \text{CC}$. A move is accepted if $\Delta\text{Cost} < 0$, or otherwise with probability $e^{-\Delta\text{Cost} / T}$.
+$\Delta\text{Cost}$ is the step of $S \cdot \text{Cost}$ with
 
-**Best solution:** whenever an accepted move gives a lower $\text{HPWL} \cdot \text{CC}$ than the best placement seen so far, that placement is saved. The saved best placement is written as the output.
+$$
+	\text{Cost} = \frac{\text{HPWL}}{\text{HPWL}_\text{init}} + \frac{\text{CC}}{\text{CC}_\text{init}}
+$$
+
+which is the quantity being minimized, and the measure used to compare results in this report. A move is accepted if $\Delta\text{Cost} < 0$, or otherwise with probability $e^{-\Delta\text{Cost} / T}$.
+
+**Best solution:** whenever an accepted move gives a lower $\text{Cost}$ than the best placement seen so far, that placement is saved. The saved best placement is written as the output.
 
 **Parameter values used:**
 - SA rounds: 5
@@ -39,7 +59,7 @@ $\Delta\text{Cost}$ is the step of $S \cdot \ln(\text{HPWL} \cdot \text{CC})$, s
 - Move range: adaptive $R_\text{limit}$ with a target acceptance rate of $0.44$; round 1 starts with the whole chip, rounds 2+ with half of it
 - Cooling interval: every 5,000 iterations
 - Cooling rates: $0.9$ (acceptance rate $>0.95$), $0.99$ ($>0.8$), $0.99$ ($>0.15$), $0.9$ (otherwise)
-- Termination: a round ends when $T < 10^{-3}$, or early once $R_\text{limit} = 1$ and $\text{HPWL} \cdot \text{CC}$ has not improved by more than $0.01\%$ for 20 temperature steps; a safety time limit of 235 seconds applies to the whole run
+- Termination: a round ends when $T < 10^{-3}$, or early once $R_\text{limit} = 1$ and $\text{Cost}$ has not improved by more than $0.01\%$ for 20 temperature steps; a safety time limit of 235 seconds applies to the whole run
 
 
 
@@ -79,8 +99,8 @@ T = T * coolingRate;
 ```
 
 - This means the temperature drops quickly ($\times 0.9$) at both ends: when almost every move is accepted (accept rate $>0.95$, the placement is still random), and when almost every move is rejected (accept rate $\le 0.15$, the placement is frozen). In between, where most of the useful optimization happens, it cools slowly ($\times 0.99$).
-- **Early stop:** once $R_\text{limit} = 1$, a round is stopped when the current $\text{HPWL} \cdot \text{CC}$ has not improved on the lowest value seen in that round by more than $0.01\%$ for 20 temperature steps (100,000 iterations). Otherwise a round ends when $T < 10^{-3}$.
-- A time limit of 235 seconds for the whole run is kept as a safety net; the test cases finish well before it (14 to 40 seconds for all 5 rounds).
+- **Early stop:** once $R_\text{limit} = 1$, a round is stopped when the current $\text{Cost}$ has not improved on the lowest value seen in that round by more than $0.01\%$ for 20 temperature steps (100,000 iterations). Otherwise a round ends when $T < 10^{-3}$.
+- A time limit of 235 seconds for the whole run is kept as a safety net; the test cases finish well before it (16 to 44 seconds for all 5 rounds).
 
 ## 4. Fast Incremental Updates for Nets, U, and Congestion Costs
 To achieve high performance, the code uses several incremental update techniques:
@@ -161,7 +181,7 @@ The bounding box update uses anchor checks to determine when a boundary can chan
 
 ## 6. Visualization
 - With `SA_TRACE` enabled in `src/main.cpp` (on by default), the placer writes `<output>_trace.csv` next to the output file, with one row per temperature step: round, iteration, time, $T$, acceptance rate, the current and best HPWL and CC, the round's initial $T$, and $R_\text{limit}$.
-- The placer takes an optional random seed, `./placer <input> <output> [seed]` (default 1), and `python3 bench.py --out <dir>` runs all test cases with several seeds and reports the mean and standard deviation of HPWL, CC and $\text{HPWL} \cdot \text{CC}$ (`--compare <results.json>` compares two versions).
+- The placer takes an optional random seed, `./placer <input> <output> [seed]` (default 1), and `python3 bench.py --out <dir>` runs all test cases with several seeds and reports the mean and standard deviation of HPWL, CC, $\text{HPWL} \cdot \text{CC}$, $\text{Cost}$ and runtime (`--compare <results.json>` compares two versions).
 - `./plot_all.sh` turns the results in `result/` into these plots in `plot/`:
 
 | Plot | Script | Content |

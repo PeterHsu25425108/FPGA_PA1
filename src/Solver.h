@@ -117,6 +117,10 @@ private:
     double total_wirelength, CC;
     double initial_wirelength = 0.0;
     double initial_CC = 0.0;
+    // SA cost of a placement: HPWL and CC normalized by their initial values
+    double normCost(double wirelength, double cc) const {
+        return wirelength / initial_wirelength + cc / initial_CC;
+    }
 
     // --- INCREMENTAL HELPERS ---
     // Helper to calculate the new bounding box given a proposed move/swap
