@@ -39,6 +39,12 @@ int main(int argc, char* argv[]) {
     if(SA_TRACE)
         solver.openTrace(outfileBase + "_trace.csv");
 
+    // SA_SNAPSHOT_EVERY=<n> (environment): every n temperature steps, dump all block positions to
+    // <outfileBase>_snap.bin for animate_sa.py. Off when unset.
+    if(const char* every = getenv("SA_SNAPSHOT_EVERY"))
+        if(atoi(every) > 0)
+            solver.openSnapshot(outfileBase + "_snap.bin", atoi(every));
+
     DEBUG_MSG("Starting Simulated Annealing optimization...", DEBUG_MAIN);
     for(int i=0; i<5; ++i)
     {

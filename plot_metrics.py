@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 FPGA Placement HPWL Visualizer
-Plots per-net HPWL for the initial vs final placement, plus a cross-case summary.
+Plots per-net HPWL for the initial vs final placement, plus a cross-case summary
+(HPWL and CC final vs initial, and the runtime of each case from result/<case>_trace.csv).
 The congestion (CC) map is drawn separately by `plot_placement.py --mode cc`.
 Metrics come from PlacementMetrics in plot_placement.py, which follows src/Solver.cpp exactly.
 """
@@ -15,6 +16,8 @@ import numpy as np
 
 from plot_placement import (FPGAPlacementParser, PlacementMetrics, style_axes,
                             COLOR_INITIAL, COLOR_FINAL, TEXT_PRIMARY, TEXT_SECONDARY, GRID_COLOR)
+
+COLOR_RUNTIME = '#8c8b85'  # neutral gray: runtime is not a placement metric
 
 
 def load_case(input_file, output_file):
@@ -97,13 +100,27 @@ def plot_case(case_name, initial, final, save_to):
     print(f"Plot saved to {save_to}")
 
 
-def plot_summary(rows, save_to):
-    """rows: list of (case_name, initial, final)"""
-    names = [r[0] for r in rows]
-    hpwl_ratio = [100 * f.hpwl / i.hpwl for _, i, f in rows]
-    cc_ratio = [100 * (f.cc - 1) / (i.cc - 1) for _, i, f in rows]
+def load_runtime(output_file):
+    """CPU time of the whole run in seconds, from the last row of <output>_trace.csv (None if no trace)"""
+    trace = Path(f"{Path(output_file).with_suffix('')}_trace.csv")
+    if not trace.exists():
+        return None
+    last = trace.read_text().strip().splitlines()[-1].split(',')
+    return float(last[2])
 
-    fig, ax = plt.subplots(figsize=(11, 5.5))
+
+def plot_summary(rows, save_to):
+    """rows: list of (case_name, initial, final, runtime_seconds or None)"""
+    names = [r[0] for r in rows]
+    hpwl_ratio = [100 * f.hpwl / i.hpwl for _, i, f, _ in rows]
+    cc_ratio = [100 * (f.cc - 1) / (i.cc - 1) for _, i, f, _ in rows]
+    runtime = [r[3] for r in rows]
+    have_runtime = all(t is not None for t in runtime)
+
+    if have_runtime:
+        fig, (ax, ax_t) = plt.subplots(1, 2, figsize=(17, 5.5), width_ratios=[1.6, 1], layout='constrained')
+    else:
+        fig, ax = plt.subplots(figsize=(11, 5.5))
     x = np.arange(len(names))
     width = 0.36
     bars_h = ax.bar(x - width / 2 - 0.01, hpwl_ratio, width, color=COLOR_INITIAL, label='HPWL')
@@ -122,10 +139,30 @@ def plot_summary(rows, save_to):
                  color=TEXT_PRIMARY, loc='left', fontweight='bold')
     ax.grid(True, axis='y', color=GRID_COLOR, linewidth=0.6)
     ax.set_axisbelow(True)
-    ax.legend(frameon=False, loc='upper left', bbox_to_anchor=(0, 0.93))
+    ax.legend(frameon=False, loc='upper left', bbox_to_anchor=(0, 0.86))
     for spine in ('top', 'right'):
         ax.spines[spine].set_visible(False)
     style_axes(ax)
+
+    if have_runtime:
+        bars_t = ax_t.bar(x, runtime, 0.6, color=COLOR_RUNTIME, label='Runtime')
+        for bar in bars_t:
+            ax_t.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + max(runtime) * 0.015,
+                      f"{bar.get_height():.0f} s", ha='center', va='bottom', fontsize=9, color=TEXT_PRIMARY)
+        mean_t = np.mean(runtime)
+        ax_t.axhline(mean_t, color=TEXT_SECONDARY, linewidth=1, linestyle='--')
+        ax_t.text(len(names) - 0.5, mean_t + max(runtime) * 0.015, f'mean = {mean_t:.0f} s',
+                  ha='right', va='bottom', fontsize=9, color=TEXT_SECONDARY)
+        ax_t.set_xticks(x)
+        ax_t.set_xticklabels(names)
+        ax_t.set_ylim(0, max(runtime) * 1.12)
+        ax_t.set_ylabel('CPU time of the whole run (s)')
+        ax_t.set_title('Runtime across testcases', fontsize=13, color=TEXT_PRIMARY, loc='left', fontweight='bold')
+        ax_t.grid(True, axis='y', color=GRID_COLOR, linewidth=0.6)
+        ax_t.set_axisbelow(True)
+        for spine in ('top', 'right'):
+            ax_t.spines[spine].set_visible(False)
+        style_axes(ax_t)
 
     fig.savefig(save_to, dpi=150, bbox_inches='tight')
     plt.close(fig)
@@ -179,7 +216,7 @@ Examples:
         initial, final = load_case(input_file, output_file)
         print_metrics(case_name, initial, final)
         plot_case(case_name, initial, final, save_dir / f"{case_name}_hpwl.png")
-        rows.append((case_name, initial, final))
+        rows.append((case_name, initial, final, load_runtime(output_file)))
 
     if args.all and rows:
         plot_summary(rows, save_dir / 'summary.png')

@@ -22,36 +22,40 @@ The three hidden test cases were added after all parameters had been chosen on t
 | hidden3 | 119 × 119 | 13000 | 37 | 3577 | 92% |
 
 ### Performance Summary
-Results of the current version with seed 1 (`./run_tests.sh`):
+Results of the current version with seed 1 (`./run_tests.sh`). The change of each final value from its initial value is given in parentheses, and the runtime is the CPU time of the whole run (one run alone). In this and every table below, the mean is taken over the eight test cases, and a mean percentage is the mean of the per-case percentages:
 
-| Case | Initial HPWL | Final HPWL | Initial CC | Final CC | Initial cost | Final cost |
-|------|--------------|------------|------------|----------|--------------|------------|
-| alu4 | 5952 | 2480 | 1.6075 | 1.0530 | 2.0000 | 1.0717 |
-| apex4 | 7803 | 3725 | 1.6933 | 1.0408 | 2.0000 | 1.0920 |
-| clma_2 | 95364 | 24687 | 1.6505 | 1.0150 | 2.0000 | 0.8738 |
-| elliptic | 15920 | 5137 | 1.4078 | 1.0215 | 2.0000 | 1.0483 |
-| pdc | 37012 | 14607 | 1.6603 | 1.0382 | 2.0000 | 1.0199 |
-| hidden1 | 104490 | 14824 | 1.7427 | 1.0096 | 2.0000 | 0.7212 |
-| hidden2 | 208661 | 20410 | 1.6623 | 1.0029 | 2.0000 | 0.7011 |
-| hidden3 | 212795 | 47600 | 1.5555 | 1.0053 | 2.0000 | 0.8699 |
+| Case | Initial HPWL | Final HPWL | Initial CC | Final CC | Initial cost | Final cost | Runtime |
+|------|--------------|------------|------------|----------|--------------|------------|---------|
+| alu4 | 5952 | 2480 (-58.3%) | 1.6075 | 1.0530 (-34.5%) | 2.0000 | 1.0717 (-46.4%) | 15 s |
+| apex4 | 7803 | 3725 (-52.3%) | 1.6933 | 1.0408 (-38.5%) | 2.0000 | 1.0920 (-45.4%) | 21 s |
+| clma_2 | 95364 | 24687 (-74.1%) | 1.6505 | 1.0150 (-38.5%) | 2.0000 | 0.8738 (-56.3%) | 47 s |
+| elliptic | 15920 | 5137 (-67.7%) | 1.4078 | 1.0215 (-27.4%) | 2.0000 | 1.0483 (-47.6%) | 24 s |
+| pdc | 37012 | 14607 (-60.5%) | 1.6603 | 1.0382 (-37.5%) | 2.0000 | 1.0199 (-49.0%) | 38 s |
+| hidden1 | 104490 | 14824 (-85.8%) | 1.7427 | 1.0096 (-42.1%) | 2.0000 | 0.7212 (-63.9%) | 45 s |
+| hidden2 | 208661 | 20410 (-90.2%) | 1.6623 | 1.0029 (-39.7%) | 2.0000 | 0.7011 (-64.9%) | 56 s |
+| hidden3 | 212795 | 47600 (-77.6%) | 1.5555 | 1.0053 (-35.4%) | 2.0000 | 0.8699 (-56.5%) | 95 s |
+| **Mean** | 86000 | 16684 (-70.8%) | 1.6225 | 1.0233 (-36.7%) | 2.0000 | 0.9247 (-53.8%) | 43 s |
 
 ### Comparison with the original version
-Measured by the cost $\text{HPWL} / \text{HPWL}_\text{init} + \text{CC} / \text{CC}_\text{init}$ of Section 2 (lower is better): mean over seeds 1 to 5, and mean wall-clock runtime with 25 runs in parallel (15 for the hidden test cases). origin/main was rebuilt with this cost so that only the algorithm differs (Section 7.1).
+Mean HPWL, CC and cost ($\text{HPWL} / \text{HPWL}_\text{init} + \text{CC} / \text{CC}_\text{init}$, Section 2; lower is better) over seeds 1 to 5, and mean wall-clock runtime with 25 runs in parallel (15 for the hidden test cases). The original version (w/o Round2+ Refinement) is called **w/o Round2+ Refinement** in this report; it was rebuilt with this cost so that only the algorithm differs (Section 7.1).
 
-| Case | origin/main cost | Current cost | Change | origin/main runtime | Current runtime | Change |
-|------|------------------|--------------|--------|---------------------|-----------------|--------|
-| alu4 | 1.1948 | **1.0742** | -10.1% | 43 s | **21 s** | -52% |
-| apex4 | 1.1470 | **1.0914** | -4.9% | 44 s | **24 s** | -45% |
-| clma_2 | 1.0506 | **0.8671** | -17.5% | 122 s | **52 s** | -57% |
-| elliptic | 1.1966 | **1.0455** | -12.6% | 60 s | **28 s** | -54% |
-| pdc | 1.1263 | **1.0201** | -9.4% | 92 s | **44 s** | -52% |
-| hidden1 | 0.8924 | **0.7223** | -19.1% | 107 s | **44 s** | -59% |
-| hidden2 | 0.9385 | **0.7019** | -25.2% | 130 s | **54 s** | -58% |
-| hidden3 | 1.2389 | **0.8694** | -29.8% | 172 s | **88 s** | -49% |
+| Case | w/o Round2+ Refinement HPWL | Current HPWL | Change | w/o Round2+ Refinement CC | Current CC | Change | w/o Round2+ Refinement cost | Current cost | Change | w/o Round2+ Refinement runtime | Current runtime | Change |
+|------|------------------|--------------|--------|----------------|------------|--------|------------------|--------------|--------|---------------------|-----------------|--------|
+| alu4 | 3274 | **2496** | -23.8% | 1.0364 | **1.0527** | +1.6% | 1.1948 | **1.0742** | -10.1% | 43 s | **21 s** | -52% |
+| apex4 | 4163 | **3723** | -10.6% | 1.0389 | **1.0402** | +0.1% | 1.1470 | **1.0914** | -4.9% | 44 s | **24 s** | -45% |
+| clma_2 | 41436 | **24132** | -41.8% | 1.0168 | **1.0135** | -0.3% | 1.0506 | **0.8671** | -17.5% | 122 s | **52 s** | -57% |
+| elliptic | 7555 | **5068** | -32.9% | 1.0164 | **1.0237** | +0.7% | 1.1966 | **1.0455** | -12.6% | 60 s | **28 s** | -54% |
+| pdc | 18702 | **14611** | -21.9% | 1.0310 | **1.0382** | +0.7% | 1.1263 | **1.0201** | -9.4% | 92 s | **44 s** | -52% |
+| hidden1 | 32660 | **14969** | -54.2% | 1.0104 | **1.0090** | -0.1% | 0.8924 | **0.7223** | -19.1% | 107 s | **44 s** | -59% |
+| hidden2 | 69248 | **20570** | -70.3% | 1.0085 | **1.0029** | -0.5% | 0.9385 | **0.7019** | -25.2% | 130 s | **54 s** | -58% |
+| hidden3 | 124703 | **47555** | -61.9% | 1.0156 | **1.0047** | -1.1% | 1.2389 | **0.8694** | -29.8% | 172 s | **88 s** | -49% |
+| **Mean** | 37718 | **16640** | -39.7% | 1.0218 | **1.0231** | +0.1% | 1.0981 | **0.9240** | -16.1% | 96 s | **44 s** | -53% |
 
-The changes are, in order: picking the best placement by total cost with a fixed cost scale (Sections 7.2, 7.3), range-limited moves (7.4), colder restarts and early stop (7.5), and guided moves (7.6). Section 7.1 shows the effect of each step on the public test cases, and Section 7.7 on the hidden ones.
+The gain comes from HPWL; CC is already close to its lower bound of 1 in w/o Round2+ Refinement and changes by at most 1.6% (slightly up on four public cases, down on the larger ones; Section 7.1).
 
-![Final vs initial HPWL and excess congestion of all test cases](docs/figures/results/summary.png)
+The changes are, in order: picking the best placement by total cost with a fixed cost scale (Sections 7.2, 7.3), range-limited moves (7.4), colder restarts and early stop (7.5), and guided moves (7.6). Section 7.1 shows the effect of each step on all test cases, and Section 7.7 discusses the hidden ones, which were only added after all parameters had been chosen.
+
+![Final vs initial HPWL and excess congestion, and runtime, of all test cases](docs/figures/results/summary.png)
 
 ## 2. Simulated Annealing Cost Function Design and Parameters
 The SA minimizes the total wirelength and the congestion cost, both normalized by their values in the initial placement:
@@ -193,15 +197,22 @@ The bounding box update uses anchor checks to determine when a boundary can chan
 | `<case>_density.png` | `plot_placement.py --mode density` | Initial and final placement side by side, colored by $U$ on a shared scale |
 | `<case>_cc.png` | `plot_placement.py --mode cc` | Initial and final $U / \text{mean}(U)$ on a shared scale centered at 1 |
 | `<case>_hpwl.png` | `plot_metrics.py` | Per-net HPWL, initial vs final |
-| `<case>_sa.png` | `plot_sa.py` | HPWL, $\text{CC} - 1$ and the cost gap to the final result (log scales), temperature, acceptance rate and $R_\text{limit}$ over the SA iterations |
-| `summary.png` | `plot_metrics.py --all` | HPWL and excess congestion $\text{CC} - 1$ of all cases, final as a percentage of initial |
+| `<case>_sa.png` | `plot_sa.py` | HPWL and $\text{CC} - 1$ (log scales), the cost (on a shifted log axis, $\log(\text{cost} - c_0)$ with $c_0$ just below the final result, so the small gains of the later rounds are visible without clipping the curve), temperature, acceptance rate and $R_\text{limit}$ over the SA iterations |
+| `summary.png` | `plot_metrics.py --all` | HPWL and excess congestion $\text{CC} - 1$ of all cases, final as a percentage of initial, and the runtime of each case |
 
-- `./plot_all.sh` also copies the result plots embedded in this report into `docs/figures/results/`, since `plot/` is not tracked.
+- `./plot_all.sh` also copies the result plots embedded in this report into `docs/figures/results/`, since `plot/` is not tracked. The two plots of the earlier version (`*_before_sa.png`) come from its benchmark traces: `python3 plot_sa.py bench/abl_v2/clma_2_s1_trace.csv --name clma_2_before --save docs/figures/results/`.
 - The diagrams in this report are generated by `python3 docs/make_diagrams.py` into `docs/figures/` (PNG and SVG).
+- **Animation of the SA run.** With the environment variable `SA_SNAPSHOT_EVERY=<n>`, the placer also writes the positions of all blocks every $n$ temperature steps to `<output>_snap.bin`, plus one every 500 iterations during the first 50,000 iterations of round 1, where the whole placement is scrambled; this does not change the result. `animate_sa.py` turns it into a GIF with the blocks colored by their starting column, the map of $U / \text{mean}(U)$, and the cost over the run. With `--frames`, the frames are spaced by how much the picture visibly changes, so the scramble, the clusters forming as round 1 cools, and the restarts play in slow motion:
+
+```
+SA_SNAPSHOT_EVERY=1 ./placer testcases/hidden3.txt result/hidden3.out 1
+python3 animate_sa.py testcases/hidden3.txt result/hidden3_snap.bin --frames 480 --fps 15 --dpi 60 \
+    --hold-start 15 --save plot/hidden3_anim.gif
+```
 
 
 ## 7. Improvements over the Original Version
-This section explains the changes made after the original submission (origin/main), in the order they were added. The final flow is:
+This section explains the changes made after the original submission (w/o Round2+ Refinement, called **w/o Round2+ Refinement** in the tables), in the order they were added. The final flow is:
 
 ![Final flow](docs/figures/flow_final.png)
 
@@ -212,77 +223,73 @@ Compared with the original flow in Section 1:
 - **Stalled or frozen?** also ends a round once the cost stops improving (Section 7.5).
 
 ### 7.1 How the changes are measured
-- Every version is measured with the cost of Section 2, $\text{Cost} = \text{HPWL} / \text{HPWL}_\text{init} + \text{CC} / \text{CC}_\text{init}$. The earlier versions were rebuilt with this cost (only the $\Delta\text{Cost}$ normalization was changed, and in versions that pick the best placement by cost, that cost too; origin/main keeps its own best-solution rule), so each step below shows the effect of the algorithm change alone.
-- The SA is random, so one run per version is not enough to tell a real improvement from luck. Each version runs every test case with seeds 1 to 5 (`bench.py`, Section 6) and the table uses the mean. For the current version, the seed-to-seed standard deviation of the cost is about 0.2% to 0.5%, so changes smaller than that are within noise.
+- Every version is measured with the cost of Section 2, $\text{Cost} = \text{HPWL} / \text{HPWL}_\text{init} + \text{CC} / \text{CC}_\text{init}$. The earlier versions were rebuilt with this cost (only the $\Delta\text{Cost}$ normalization was changed, and in versions that pick the best placement by cost, that cost too; w/o Round2+ Refinement keeps its own best-solution rule), so each step below shows the effect of the algorithm change alone.
+- The SA is random, so one run per version is not enough to tell a real improvement from luck. Each version runs every test case with seeds 1 to 5 (`bench.py`, Section 6) and the table uses the mean. For the current version, the seed-to-seed standard deviation of the cost is about 0.1% to 0.5%, so changes smaller than that are within noise.
+- The tables cover all eight test cases; the Mean column is the mean over them (for a percentage, the mean of the per-case percentages). The three hidden test cases were added last and are discussed separately in Section 7.7.
 
 #### Change of each step
 Change of the mean cost from the step before (negative is better):
 
-| Step | Section | alu4 | apex4 | clma_2 | elliptic | pdc |
-|------|---------|---|---|---|---|---|
-| origin/main (cost) | | 1.1948 | 1.1470 | 1.0506 | 1.1966 | 1.1263 |
-| Best by total cost, fixed cost scale | 7.2, 7.3 | -7.5% | -2.2% | +0.1% | -8.1% | -1.3% |
-| Range-limited moves | 7.4 | -2.6% | -2.6% | -14.1% | -4.7% | -7.9% |
-| Colder restarts, early stop | 7.5 | 0.0% | -0.1% | -3.1% | -0.1% | -0.1% |
-| Guided moves | 7.6 | -0.1% | 0.0% | -0.9% | -0.3% | -0.2% |
-| **Total vs origin/main** | | **-10.1%** | **-4.9%** | **-17.5%** | **-12.6%** | **-9.4%** |
+| Step | Section | alu4 | apex4 | clma_2 | elliptic | pdc | hidden1 | hidden2 | hidden3 | Mean |
+|------|---------|---|---|---|---|---|---|---|---|---|
+| w/o Round2+ Refinement (cost) | | 1.1948 | 1.1470 | 1.0506 | 1.1966 | 1.1263 | 0.8924 | 0.9385 | 1.2389 | 1.0981 |
+| Best by total cost, fixed cost scale | 7.2, 7.3 | -7.5% | -2.2% | +0.1% | -8.1% | -1.3% | -0.2% | -0.3% | -0.5% | -2.5% |
+| Range-limited moves | 7.4 | -2.6% | -2.6% | -14.1% | -4.7% | -7.9% | -16.3% | -19.5% | -22.1% | -11.2% |
+| Colder restarts, early stop | 7.5 | 0.0% | -0.1% | -3.1% | -0.1% | -0.1% | -1.9% | -4.4% | -6.5% | -2.0% |
+| Guided moves | 7.6 | -0.1% | 0.0% | -0.9% | -0.3% | -0.2% | -1.3% | -2.5% | -3.1% | -1.1% |
+| **Total vs w/o Round2+ Refinement** | | **-10.1%** | **-4.9%** | **-17.5%** | **-12.6%** | **-9.4%** | **-19.1%** | **-25.2%** | **-29.8%** | **-16.1%** |
 
-#### Improvement over the initial placement
-Improvement of each stage over the initial placement, as $1 - \text{value} / \text{initial value}$ (mean over seeds 1 to 5; higher is better). The initial placement is the same for every version:
-
-| | alu4 | apex4 | clma_2 | elliptic | pdc |
-|---|---|---|---|---|---|
-| Initial HPWL | 5952 | 7803 | 95364 | 15920 | 37012 |
-| Initial CC | 1.6075 | 1.6933 | 1.6505 | 1.4078 | 1.6603 |
+#### Change from w/o Round2+ Refinement
+Change of each stage from w/o Round2+ Refinement, as $\text{value} / \text{value}_\text{w/o} - 1$ (mean over seeds 1 to 5; negative is better). The first row gives the values of w/o Round2+ Refinement itself:
 
 **Cost**
 
-| Stage | alu4 | apex4 | clma_2 | elliptic | pdc |
-|-------|---|---|---|---|---|
-| origin/main | 40.3% | 42.6% | 47.5% | 40.2% | 43.7% |
-| + Best by total cost, fixed cost scale | 44.8% | 43.9% | 47.4% | 45.0% | 44.4% |
-| + Range-limited moves | 46.2% | 45.4% | 54.8% | 47.6% | 48.8% |
-| + Colder restarts, early stop | 46.2% | 45.4% | 56.2% | 47.6% | 48.9% |
-| **+ Guided moves (current)** | **46.3%** | **45.4%** | **56.6%** | **47.7%** | **49.0%** |
+| Stage | alu4 | apex4 | clma_2 | elliptic | pdc | hidden1 | hidden2 | hidden3 | Mean |
+|-------|---|---|---|---|---|---|---|---|---|
+| w/o Round2+ Refinement (cost) | 1.1948 | 1.1470 | 1.0506 | 1.1966 | 1.1263 | 0.8924 | 0.9385 | 1.2389 | 1.0981 |
+| + Best by total cost, fixed cost scale | -7.5% | -2.2% | +0.1% | -8.1% | -1.3% | -0.2% | -0.3% | -0.5% | -2.5% |
+| + Range-limited moves | -10.0% | -4.7% | -14.0% | -12.3% | -9.1% | -16.4% | -19.7% | -22.5% | -13.6% |
+| + Colder restarts, early stop | -10.0% | -4.8% | -16.7% | -12.4% | -9.2% | -18.0% | -23.3% | -27.6% | -15.2% |
+| **+ Guided moves (current)** | **-10.1%** | **-4.9%** | **-17.5%** | **-12.6%** | **-9.4%** | **-19.1%** | **-25.2%** | **-29.8%** | **-16.1%** |
 
 **HPWL**
 
-| Stage | alu4 | apex4 | clma_2 | elliptic | pdc |
-|-------|---|---|---|---|---|
-| origin/main | 45.0% | 46.6% | 56.5% | 52.5% | 49.5% |
-| + Best by total cost, fixed cost scale | 54.7% | 49.4% | 56.6% | 62.5% | 51.2% |
-| + Range-limited moves | 57.5% | 52.0% | 70.9% | 67.5% | 59.8% |
-| + Colder restarts, early stop | 57.5% | 52.0% | 73.7% | 67.6% | 59.9% |
-| **+ Guided moves (current)** | **58.1%** | **52.3%** | **74.7%** | **68.2%** | **60.5%** |
+| Stage | alu4 | apex4 | clma_2 | elliptic | pdc | hidden1 | hidden2 | hidden3 | Mean |
+|-------|---|---|---|---|---|---|---|---|---|
+| w/o Round2+ Refinement (HPWL) | 3274 | 4163 | 41436 | 7555 | 18702 | 32660 | 69248 | 124703 | 37718 |
+| + Best by total cost, fixed cost scale | -17.7% | -5.1% | -0.1% | -21.0% | -3.5% | -0.9% | -0.8% | -1.1% | -6.3% |
+| + Range-limited moves | -22.8% | -10.0% | -32.9% | -31.5% | -20.5% | -46.1% | -54.6% | -46.4% | -33.1% |
+| + Colder restarts, early stop | -22.7% | -9.9% | -39.4% | -31.8% | -20.6% | -50.7% | -64.6% | -56.9% | -37.1% |
+| **+ Guided moves (current)** | **-23.8%** | **-10.6%** | **-41.8%** | **-32.9%** | **-21.9%** | **-54.2%** | **-70.3%** | **-61.9%** | **-39.7%** |
 
 **CC**
 
-| Stage | alu4 | apex4 | clma_2 | elliptic | pdc |
-|-------|---|---|---|---|---|
-| origin/main | 35.5% | 38.6% | 38.4% | 27.8% | 37.9% |
-| + Best by total cost, fixed cost scale | 34.8% | 38.4% | 38.3% | 27.5% | 37.7% |
-| + Range-limited moves | 34.9% | 38.7% | 38.8% | 27.6% | 37.8% |
-| + Colder restarts, early stop | 35.0% | 38.9% | 38.8% | 27.6% | 37.9% |
-| **+ Guided moves (current)** | **34.5%** | **38.6%** | **38.6%** | **27.3%** | **37.5%** |
-| *Upper bound (CC = 1)* | *37.8%* | *40.9%* | *39.4%* | *29.0%* | *39.8%* |
+| Stage | alu4 | apex4 | clma_2 | elliptic | pdc | hidden1 | hidden2 | hidden3 | Mean |
+|-------|---|---|---|---|---|---|---|---|---|
+| w/o Round2+ Refinement (CC) | 1.0364 | 1.0389 | 1.0168 | 1.0164 | 1.0310 | 1.0104 | 1.0085 | 1.0156 | 1.0218 |
+| + Best by total cost, fixed cost scale | +1.2% | +0.4% | +0.2% | +0.5% | +0.4% | +0.2% | 0.0% | 0.0% | +0.4% |
+| + Range-limited moves | +1.0% | -0.2% | -0.7% | +0.3% | +0.2% | -0.5% | -0.7% | -1.0% | -0.2% |
+| + Colder restarts, early stop | +0.9% | -0.3% | -0.7% | +0.3% | 0.0% | -0.4% | -0.7% | -1.2% | -0.3% |
+| **+ Guided moves (current)** | **+1.6%** | **+0.1%** | **-0.3%** | **+0.7%** | **+0.7%** | **-0.1%** | **-0.5%** | **-1.1%** | **+0.1%** |
+| *Lower bound (CC = 1)* | *-3.5%* | *-3.7%* | *-1.7%* | *-1.6%* | *-3.0%* | *-1.0%* | *-0.8%* | *-1.5%* | *-2.1%* |
 
-- The cost improvement is the mean of the HPWL and CC improvements, since $\text{Cost} = \text{HPWL} / \text{HPWL}_\text{init} + \text{CC} / \text{CC}_\text{init}$ starts at 2.
-- CC cannot go below 1 (perfectly uniform coverage), so its improvement is bounded by $1 - 1 / \text{CC}_\text{init}$. Already origin/main is within 1 to 2.5 points of that bound, and every later stage changes CC by less than one point. Almost all of the gain of the later stages comes from HPWL.
+- The cost change is the mean of the HPWL and CC changes, weighted by their shares of the cost of w/o Round2+ Refinement (Section 2).
+- CC cannot go below 1 (perfectly uniform coverage), so its possible gain is bounded by $1 / \text{CC}_\text{w/o} - 1$, between 0.8% and 3.5%. Every stage changes CC by less than that, and on four public cases CC even rises slightly; almost all of the gain of the later stages comes from HPWL.
 
 #### Runtime
-Mean wall-clock time over seeds 1 to 5 with 25 runs in parallel (a single run alone is somewhat faster, Section 3), and its change from origin/main as $t / t_\text{origin} - 1$ ($-$ is shorter, $+$ is longer):
+Mean wall-clock time over seeds 1 to 5 with 25 runs in parallel, 15 for the hidden test cases (a single run alone is somewhat faster, Section 3), and its change from w/o Round2+ Refinement as $t / t_\text{w/o} - 1$ ($-$ is shorter, $+$ is longer):
 
-| Stage | alu4 | apex4 | clma_2 | elliptic | pdc |
-|-------|---|---|---|---|---|
-| origin/main | 43 s | 44 s | 122 s | 60 s | 92 s |
-| + Best by total cost, fixed cost scale | 35 s (-17%) | 34 s (-24%) | 114 s (-7%) | 51 s (-15%) | 83 s (-10%) |
-| + Range-limited moves | 96 s (+125%) | 108 s (+144%) | 169 s (+38%) | 107 s (+79%) | 152 s (+66%) |
-| + Colder restarts, early stop | 19 s (-55%) | 22 s (-51%) | 51 s (-58%) | 24 s (-60%) | 41 s (-55%) |
-| **+ Guided moves (current)** | **21 s (-52%)** | **24 s (-45%)** | **52 s (-57%)** | **28 s (-54%)** | **44 s (-52%)** |
+| Stage | alu4 | apex4 | clma_2 | elliptic | pdc | hidden1 | hidden2 | hidden3 | Mean |
+|-------|---|---|---|---|---|---|---|---|---|
+| w/o Round2+ Refinement | 43 s | 44 s | 122 s | 60 s | 92 s | 107 s | 130 s | 172 s | 96 s |
+| + Best by total cost, fixed cost scale | 35 s (-17%) | 34 s (-24%) | 114 s (-7%) | 51 s (-15%) | 83 s (-10%) | 102 s (-4%) | 128 s (-2%) | 167 s (-3%) | 89 s (-10%) |
+| + Range-limited moves | 96 s (+125%) | 108 s (+144%) | 169 s (+38%) | 107 s (+79%) | 152 s (+66%) | 99 s (-7%) | 155 s (+19%) | 217 s (+27%) | 138 s (+61%) |
+| + Colder restarts, early stop | 19 s (-55%) | 22 s (-51%) | 51 s (-58%) | 24 s (-60%) | 41 s (-55%) | 41 s (-62%) | 60 s (-54%) | 100 s (-42%) | 45 s (-55%) |
+| **+ Guided moves (current)** | **21 s (-52%)** | **24 s (-45%)** | **52 s (-57%)** | **28 s (-54%)** | **44 s (-52%)** | **44 s (-59%)** | **54 s (-58%)** | **88 s (-49%)** | **44 s (-53%)** |
 
-- Range-limited moves make every case slower than origin/main; colder restarts and early stop more than make up for it, and the current version takes 45% to 57% less time than origin/main (1.8 to 2.4 times faster).
+- Range-limited moves make every case but hidden1 slower than w/o Round2+ Refinement; colder restarts and early stop more than make up for it, and the current version takes 45% to 59% less time than w/o Round2+ Refinement (1.8 to 2.4 times faster, 2.2 on average).
 
-**Why range-limited moves are slower.** Each iteration actually becomes faster, but the run needs about 4 times as many iterations (seed 1, before and after range-limited moves):
+**Why range-limited moves are slower.** Each iteration actually becomes faster, but the run needs about 4 times as many iterations (seed 1, before and after range-limited moves; hidden1 is the exception, see below):
 
 | Case | Iterations | Time per iteration | Temperature steps cooled by $\times 0.99$ | Acceptance rate at $T < 100$ |
 |------|------------|--------------------|--------------------------------------------|------------------------------|
@@ -291,10 +298,14 @@ Mean wall-clock time over seeds 1 to 5 with 25 runs in parallel (a single run al
 | clma_2 | 12.5M → 47.4M | 9.05 → 3.57 µs | 1127 → 8803 | 4.3% → 18.9% |
 | elliptic | 12.1M → 48.8M | 4.24 → 2.19 µs | 1219 → 9322 | 5.2% → 22.7% |
 | pdc | 12.3M → 47.2M | 6.74 → 3.20 µs | 1117 → 8840 | 4.5% → 16.8% |
+| hidden1 | 11.8M → 22.2M | 8.56 → 4.44 µs | 1021 → 3301 | 2.4% → 13.4% |
+| hidden2 | 12.5M → 46.1M | 10.19 → 3.33 µs | 1088 → 8510 | 5.4% → 30.9% |
+| hidden3 | 13.7M → 46.1M | 12.16 → 4.73 µs | 1345 → 8544 | 8.7% → 34.4% |
+| **Mean** | 12.2M → 44.5M | 7.12 → 3.21 µs | 1200 → 8321 | 6.6% → 23.1% |
 
 - A round only ends when $T < 10^{-3}$, and how fast $T$ drops is set by the acceptance rate (Section 3): $\times 0.9$ above 95% and below 15%, $\times 0.99$ in between.
-- **Before:** the target site was anywhere on the chip, so at low temperature almost every move went far and was rejected. The acceptance rate fell to 4% to 13%, below 15%, which switched to fast cooling ($\times 0.9$) and ended the round quickly.
-- **After:** moves are local and much more likely to be accepted, so at low temperature the acceptance rate stays at 17% to 28% and never falls below 15%. Once $R_\text{limit} = 1$, many moves do not change the cost at all and are always accepted ($\Delta\text{Cost} = 0$), which keeps the rate above 15%. The run keeps cooling slowly ($\times 0.99$) all the way down.
+- **Before:** the target site was anywhere on the chip, so at low temperature almost every move went far and was rejected. The acceptance rate fell to 2% to 13%, below 15%, which switched to fast cooling ($\times 0.9$) and ended the round quickly.
+- **After:** moves are local and much more likely to be accepted, so at low temperature the acceptance rate stays at 17% to 34% and never falls below 15% (hidden1 is the exception: its rate averages 13% and does drop below 15% at times, so its run only grows 1.9 times and ends up 7% shorter than w/o Round2+ Refinement). Once $R_\text{limit} = 1$, many moves do not change the cost at all and are always accepted ($\Delta\text{Cost} = 0$), which keeps the rate above 15%. The run keeps cooling slowly ($\times 0.99$) all the way down.
 - Going from $T = 10^4$ to $10^{-3}$ takes about 150 temperature steps at $\times 0.9$ but about 1600 at $\times 0.99$, more than 10 times as many. With 5,000 iterations per step, the total number of iterations grows about 4 times.
 - Each iteration is faster because a local move changes the affected bounding boxes only a little, so fewer cells of $U$ are updated (Section 4.2). This offsets part of the extra iterations, but not all of them.
 - Colder restarts and early stop (Section 7.5) remove exactly this waste: a round ends once its cost stops improving instead of cooling slowly to $T < 10^{-3}$.
@@ -341,6 +352,10 @@ Left: a large $R_\text{limit}$ early in a round; block b may move to any site in
 1. Every round restarted from a high temperature with the whole chip as the move range. The first moves of rounds 2 to 5 scrambled the placement of the previous round, and each round mostly repeated round 1 instead of improving on it.
 2. Once $R_\text{limit} = 1$, many moves do not change the cost at all and are always accepted, so the acceptance rate never falls below the 15% that triggers fast cooling. The temperature kept dropping slowly from about $10^4$ to $10^{-3}$, while the cost stopped improving long before.
 
+![SA run of clma_2 before colder restarts](docs/figures/results/clma_2_before_sa.png)
+
+The SA run of clma_2 (seed 1) with range-limited moves, before this change, shows problem 1. Rounds 2 to 5 restart at 528,000, 348,480, 229,997 and 151,798 with the whole chip as the move range ($R_\text{limit}$ panel), so HPWL jumps back to about 125,000, above the initial 95,364. Each round then cools down again but ends 0.05%, 0.27%, 2.2% and 1.1% **above** the best placement of round 1: in the cost panel, the best-kept cost stays at 0.9116 after round 1, while rounds 2 to 5 end at 0.912, 0.914, 0.932, 0.921, never below it. The output is the placement found in round 1, and rounds 2 to 5 only add runtime (169 seconds in total). The long flat tails of every round, with an acceptance rate just above 15%, show problem 2.
+
 **Change 1: colder restarts.** During round 1, the temperature at which $R_\text{limit}$ first shrinks to half of the chip is recorded as $T_\text{reheat}$. This is where the moves turn from global to local. Rounds 2+ restart from there instead of from $T_0$:
 
 | Round | Initial $T$ | Initial $R_\text{limit}$ |
@@ -371,7 +386,11 @@ if stallSteps >= 20:                    // 20 steps = 100,000 iterations
 
 The figure sketches one run: round 1 starts at $T_0$ with the whole chip as the move range; $T_\text{reheat}$ is taken where its move range reaches half the chip (dotted lines); rounds 2 to 5 start at $T_\text{reheat}$, then $0.66\times$ lower each round, with half the chip as the move range; and every round ends early once it stops improving (×).
 
-**Effect.** Runtime drops 3.3 to 5.0 times compared with range-limited moves alone, to below that of origin/main, at the same or a lower cost (alu4 0.0%, apex4 -0.1%, clma_2 -3.1%, elliptic -0.1%, pdc -0.1%). The later rounds now improve on round 1: on clma_2, the cost at the end of round 1 is 4.4% above the final result, and rounds 2 to 5 each close part of that gap (see the cost panel of `plot/clma_2_sa.png`).
+**Effect.** Runtime drops 3.3 to 5.0 times compared with range-limited moves alone, to below that of w/o Round2+ Refinement, at the same or a lower cost (alu4 0.0%, apex4 -0.1%, clma_2 -3.1%, elliptic -0.1%, pdc -0.1%). The later rounds now improve on round 1: on clma_2, the cost at the end of round 1 is 4.4% above the final result, and rounds 2 to 5 each close part of that gap:
+
+![SA run of clma_2 after colder restarts](docs/figures/results/clma_2_sa.png)
+
+Compared with the run before: the restarts only raise HPWL to about 43,000 instead of 125,000, every round lowers the best-kept cost further (cost panel: 0.912 → 0.882 → 0.879 → 0.876 → 0.874 at the end of rounds 1 to 5), and the rounds end once they stop improving, so the whole run takes 47 seconds instead of 169.
 
 ### 7.6 Guided moves
 **Idea.** A random move rarely helps once the placement is good. A guided move instead picks a block that is likely to shorten its nets when moved, moves it to where its nets are shortest, and prefers a site with little congestion so that CC does not rise. Guided moves are used for 30% of the moves in rounds 2+; round 1 still explores with random moves only.
@@ -408,51 +427,36 @@ In the figure, the four dashed circles are the sampled sites, and the numbers ar
 **Effect.** The cost drops in 4 of 5 cases and is unchanged on apex4 (alu4 -0.1%, apex4 0.0%, clma_2 -0.9%, elliptic -0.3%, pdc -0.2%); only clma_2 and elliptic are clearly beyond the seed-to-seed noise. Runtime grows by up to 15%. Guided moves mostly shorten HPWL (mean HPWL: alu4 -1.4%, apex4 -0.7%, clma_2 -3.9%, elliptic -1.7%, pdc -1.6%), while CC rises slightly (mean CC: alu4 +0.0072, apex4 +0.0048, clma_2 +0.0034, elliptic +0.0040, pdc +0.0066), since the optimal region is chosen by wirelength and $U$ only breaks ties within it.
 
 ### 7.7 Results on the hidden test cases
-The three hidden test cases were only added after every parameter of Sections 7.2 to 7.6 had been chosen on the five public ones, so they show how well the changes carry over to unseen and much larger designs (2,187 to 3,577 nets and 3,288 to 13,000 blocks, against at most 1,559 nets and 3,580 blocks in the public cases; see Section 1). They were measured exactly like Section 7.1: every earlier version rebuilt with the cost of Section 2, seeds 1 to 5, 15 runs in parallel. The seed-to-seed standard deviation of the current version's cost is 0.1% to 0.2%.
+The three hidden test cases were only added after every parameter of Sections 7.2 to 7.6 had been chosen on the five public ones, so they show how well the changes carry over to unseen and much larger designs (2,187 to 3,577 nets and 3,288 to 13,000 blocks, against at most 1,559 nets and 3,580 blocks in the public cases; see Section 1). They were measured exactly like Section 7.1: every earlier version rebuilt with the cost of Section 2, seeds 1 to 5, 15 runs in parallel. The seed-to-seed standard deviation of the current version's cost is 0.1% to 0.2%. The tables of Section 7.1 already include them; the table below repeats the per-step change for the discussion here.
 
 **Change of each step** (change of the mean cost from the step before; negative is better):
 
-| Step | Section | hidden1 | hidden2 | hidden3 |
-|------|---------|---|---|---|
-| origin/main (cost) | | 0.8924 | 0.9385 | 1.2389 |
-| Best by total cost, fixed cost scale | 7.2, 7.3 | -0.2% | -0.3% | -0.5% |
-| Range-limited moves | 7.4 | -16.3% | -19.5% | -22.1% |
-| Colder restarts, early stop | 7.5 | -1.9% | -4.4% | -6.5% |
-| Guided moves | 7.6 | -1.3% | -2.5% | -3.1% |
-| **Total vs origin/main** | | **-19.1%** | **-25.2%** | **-29.8%** |
+| Step | Section | hidden1 | hidden2 | hidden3 | Mean |
+|------|---------|---|---|---|---|
+| w/o Round2+ Refinement (cost) | | 0.8924 | 0.9385 | 1.2389 | 1.0233 |
+| Best by total cost, fixed cost scale | 7.2, 7.3 | -0.2% | -0.3% | -0.5% | -0.3% |
+| Range-limited moves | 7.4 | -16.3% | -19.5% | -22.1% | -19.3% |
+| Colder restarts, early stop | 7.5 | -1.9% | -4.4% | -6.5% | -4.3% |
+| Guided moves | 7.6 | -1.3% | -2.5% | -3.1% | -2.3% |
+| **Total vs w/o Round2+ Refinement** | | **-19.1%** | **-25.2%** | **-29.8%** | **-24.7%** |
 
-**Improvement over the initial placement** ($1 - \text{value} / \text{initial value}$; higher is better):
-
-| Stage | hidden1 Cost | hidden1 HPWL | hidden1 CC | hidden2 Cost | hidden2 HPWL | hidden2 CC | hidden3 Cost | hidden3 HPWL | hidden3 CC |
-|-------|---|---|---|---|---|---|---|---|---|
-| origin/main | 55.4% | 68.7% | 42.0% | 53.1% | 66.8% | 39.3% | 38.1% | 41.4% | 34.7% |
-| + Best by total cost, fixed cost scale | 55.5% | 69.0% | 41.9% | 53.2% | 67.1% | 39.3% | 38.4% | 42.1% | 34.7% |
-| + Range-limited moves | 62.7% | 83.1% | 42.3% | 62.3% | 84.9% | 39.8% | 52.0% | 68.6% | 35.4% |
-| + Colder restarts, early stop | 63.4% | 84.6% | 42.3% | 64.0% | 88.2% | 39.8% | 55.1% | 74.8% | 35.5% |
-| **+ Guided moves (current)** | **63.9%** | **85.7%** | **42.1%** | **64.9%** | **90.1%** | **39.7%** | **56.5%** | **77.7%** | **35.4%** |
-| *Upper bound of CC (CC = 1)* |  |  | *42.6%* |  |  | *39.8%* |  |  | *35.7%* |
-
-**Runtime** (mean wall-clock time, and change from origin/main; $-$ is shorter, $+$ is longer):
-
-| Stage | hidden1 | hidden2 | hidden3 |
-|-------|---|---|---|
-| origin/main | 107 s | 130 s | 172 s |
-| + Best by total cost, fixed cost scale | 102 s (-4%) | 128 s (-2%) | 167 s (-3%) |
-| + Range-limited moves | 99 s (-7%) | 155 s (+19%) | 217 s (+27%) |
-| + Colder restarts, early stop | 41 s (-62%) | 60 s (-54%) | 100 s (-42%) |
-| **+ Guided moves (current)** | **44 s (-59%)** | **54 s (-58%)** | **88 s (-49%)** |
+The change of each stage from w/o Round2+ Refinement in cost, HPWL and CC, and the runtime of each stage, are in the tables of Section 7.1, which cover all eight test cases.
 
 **Observations.**
-- The current version lowers the cost by 19% to 30% against origin/main, more than on any public test case (4.9% to 17.5%). The larger the design, the more the changes help, as already seen on clma_2, the largest public case.
-- **Range-limited moves** again give the largest single gain (hidden1 -16.3%, hidden2 -19.5%, hidden3 -22.1%), because on a large chip almost every random far move is rejected. They also make the two larger runs longer (hidden2 +19%, hidden3 +27% against origin/main): up to 219 seconds of CPU time on hidden3, close to the 235-second limit.
+- The current version lowers the cost by 19% to 30% against w/o Round2+ Refinement, more than on any public test case (4.9% to 17.5%). The larger the design, the more the changes help, as already seen on clma_2, the largest public case.
+- **Range-limited moves** again give the largest single gain (hidden1 -16.3%, hidden2 -19.5%, hidden3 -22.1%), because on a large chip almost every random far move is rejected. They also make the two larger runs longer (hidden2 +19%, hidden3 +27% against w/o Round2+ Refinement): up to 219 seconds of CPU time on hidden3, close to the 235-second limit.
 - **Colder restarts and early stop** matter much more here than on the public cases (hidden1 -1.9%, hidden2 -4.4%, hidden3 -6.5%), besides cutting the runtime by more than half: the later rounds keep improving on the large designs (see the SA plot below).
 - **Guided moves** also help clearly more than on the public cases (hidden1 -1.3%, hidden2 -2.5%, hidden3 -3.1%), all far beyond the seed-to-seed noise. On a large chip, a random move within $R_\text{limit}$ rarely lands where a block's nets are shortest, so moving it straight into its optimal region pays off more.
-- As on the public cases, almost all of the gain comes from HPWL: CC is already within about one point of its bound for origin/main.
+- As on the public cases, almost all of the gain comes from HPWL: CC is already within about one point of its bound for w/o Round2+ Refinement.
 - The current version's longest run takes 89 seconds of CPU time, well within the 235-second limit.
+
+![SA run of hidden3 before colder restarts](docs/figures/results/hidden3_before_sa.png)
+
+Before colder restarts (range-limited moves only, seed 1), the restarted rounds on hidden3 even climbed to about 450,000 HPWL, more than twice the initial 212,795, and rounds 2 to 5 together improved on round 1 by only 0.17%.
 
 ![SA run of hidden3](docs/figures/results/hidden3_sa.png)
 
-The SA run of hidden3 (seed 1): every round from 2 to 5 lowers the best cost further (cost panel). Even with $R_\text{limit} = 1$, the acceptance rate stays around 33% to 42% on this large chip, so the rounds end through the early stop rather than by cooling to $T < 10^{-3}$.
+With the current version (seed 1), the end of round 1 is 10.8% above the final result, and every round from 2 to 5 lowers the best cost further (cost panel). Even with $R_\text{limit} = 1$, the acceptance rate stays around 33% to 42% on this large chip, so the rounds end through the early stop rather than by cooling to $T < 10^{-3}$.
 
 ![Congestion map of hidden1](docs/figures/results/hidden1_cc.png)
 

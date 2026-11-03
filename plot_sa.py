@@ -8,10 +8,11 @@ The trace has one row per temperature step (every 5000 iterations).
 
 Cost function: SA_update.cpp accepts a move based on
     dCost = costScale * (dHPWL / HPWL_init + dCC / CC_init),   costScale = 100 * (round 1 T0)
-which is the step of costScale * cost with cost = HPWL / HPWL_init + CC / CC_init. The cost panel
-plots how far the cost is above the final result, on a log axis,
-    cost / cost_final best - 1,
-so 0.01 means 1% above the final result, and small improvements in later rounds stay visible.
+which is the step of costScale * cost with cost = HPWL / HPWL_init + CC / CC_init (2 for the initial
+placement). The cost panel plots this cost on a shifted log axis: heights follow log(cost - c0), where
+c0 lies a little below the final result, and the ticks show the cost itself. This stretches the range
+near the final result, so the small gains of the later rounds stay visible, while the whole run,
+restart peaks included, still fits without clipping.
 """
 
 import argparse
@@ -61,14 +62,26 @@ def finish_axes(ax, ylabel):
 def plot_trace(case_name, trace, save_to):
     x = trace['iter'] / 1e6
     hpwl0, cc0 = trace['HPWL'][0], trace['CC'][0]
-    # cost = HPWL / HPWL_init + CC / CC_init; plotted as the relative gap above the final best,
-    # floored for the log axis
+    # cost = HPWL / HPWL_init + CC / CC_init (2 for the initial placement)
     def norm_cost(hpwl, cc):
         return hpwl / hpwl0 + cc / cc0
-    final_cost = norm_cost(trace['best_HPWL'][-1], trace['best_CC'][-1])
-    gap_floor = 1e-5
-    cost = np.maximum(norm_cost(trace['HPWL'], trace['CC']) / final_cost - 1, gap_floor)
-    best_cost = np.maximum(norm_cost(trace['best_HPWL'], trace['best_CC']) / final_cost - 1, gap_floor)
+    cost = norm_cost(trace['HPWL'], trace['CC'])
+    best_cost = norm_cost(trace['best_HPWL'], trace['best_CC'])
+    # CC is bounded below by 1 (uniform coverage); its excess CC - 1 goes on a log axis, with a small
+    # floor so that a (numerically) perfect placement does not disappear from the axis
+    cc_excess = np.maximum(trace['CC'] - 1, 1e-6)
+    best_cc_excess = np.maximum(trace['best_CC'] - 1, 1e-6)
+
+    # Shifted log axis for the cost: c0 lies delta below the final result, with delta a quarter of
+    # the range the later rounds work in (from the final result up to the result of round 1, or the
+    # highest cost a round ends at). The current cost never goes below the best kept one, and that
+    # never below the final result, so every point stays above c0.
+    rounds = trace['round'].astype(int)
+    round_ends = [np.flatnonzero(rounds == k)[-1] for k in np.unique(rounds)]
+    final_cost = best_cost[-1]
+    later_span = max([best_cost[round_ends[0]]] + [cost[i] for i in round_ends]) - final_cost
+    delta = 0.25 * max(later_span, 0.002 * final_cost)
+    c0 = final_cost - delta
 
     has_range = 'R_limit' in trace
     ratios = [1, 1, 1, 0.8, 0.8] + ([0.8] if has_range else [])
@@ -89,8 +102,8 @@ def plot_trace(case_name, trace, save_to):
     # CC
     ax = axes[1]
     # CC is bounded below by 1 (uniform coverage), so plot the excess CC - 1 on a log axis
-    ax.semilogy(x, trace['CC'] - 1, color=COLOR_FINAL, linewidth=1.2, label='current')
-    ax.semilogy(x, trace['best_CC'] - 1, color=COLOR_BEST, linewidth=2, label='best kept')
+    ax.semilogy(x, cc_excess, color=COLOR_FINAL, linewidth=1.2, label='current')
+    ax.semilogy(x, best_cc_excess, color=COLOR_BEST, linewidth=2, label='best kept')
     ax.set_title(f"Congestion cost CC   {cc0:.4f} → {trace['best_CC'][-1]:.4f}   "
                  f"(plotted as CC − 1, log scale; CC = 1 is uniform)", fontsize=12,
                  color=TEXT_PRIMARY, loc='left')
@@ -99,13 +112,22 @@ def plot_trace(case_name, trace, save_to):
 
     # Cost function
     ax = axes[2]
-    ax.semilogy(x, cost, color='#6250d6', linewidth=1.2, label='current')
-    ax.semilogy(x, best_cost, color=COLOR_BEST, linewidth=2, label='best kept')
-    ax.set_ylim(bottom=gap_floor)
-    ax.set_title('Cost above final best   cost / cost_final − 1,   cost = HPWL / HPWL₀ + CC / CC₀    '
-                 '(0.01 = 1% above)', fontsize=12, color=TEXT_PRIMARY, loc='left')
+    ax.plot(x, cost, color='#6250d6', linewidth=1.2, label='current')
+    ax.plot(x, best_cost, color=COLOR_BEST, linewidth=2, label='best kept')
+    ax.set_yscale('function', functions=(lambda y: np.log(np.maximum(y - c0, 1e-12)),
+                                         lambda z: np.exp(z) + c0))
+    ax.set_ylim(c0 + 0.5 * delta, cost.max() * 1.03)
+    # ticks: the final result, the result of round 1, and round numbers above
+    ticks = {round(final_cost, 3), round(best_cost[round_ends[0]], 3)}
+    ticks |= {t for t in (1.0, 1.5, 2.0) if final_cost + 2 * delta < t < cost.max() * 1.03}
+    ax.set_yticks(sorted(ticks))
+    ax.set_yticklabels([f"{t:.3f}" if t < 1 else f"{t:.1f}" for t in sorted(ticks)])
+    ax.minorticks_off()
+    ax.set_title(f"Cost = HPWL / HPWL₀ + CC / CC₀   2 → {final_cost:.4f}   "
+                 f"(shifted log axis: height ∝ log(cost − {c0:.3f}))", fontsize=12,
+                 color=TEXT_PRIMARY, loc='left')
     ax.legend(frameon=False, fontsize=9, loc='upper right')
-    finish_axes(ax, 'Cost gap (log)')
+    finish_axes(ax, 'Cost')
 
     # Temperature
     ax = axes[3]
@@ -160,13 +182,19 @@ Examples:
 
   # Every *_trace.csv in a directory
   python plot_sa.py result/*_trace.csv --save plot/
+
+  # A trace of another version, with its own name
+  python plot_sa.py bench/abl_v2/clma_2_s1_trace.csv --name clma_2_before --save docs/figures/results/
         ''')
     parser_args.add_argument('traces', nargs='+', help='<case>_trace.csv file(s) written by the placer')
     parser_args.add_argument('--save', default='plot/', help='Output directory (default: plot/)')
+    parser_args.add_argument('--name', help='Name used in the title and as <name>_sa.png (one trace only)')
     args = parser_args.parse_args()
 
+    if args.name and len(args.traces) != 1:
+        parser_args.error('--name needs exactly one trace')
     for trace_file in args.traces:
-        case_name = Path(trace_file).name.replace('_trace.csv', '')
+        case_name = args.name or Path(trace_file).name.replace('_trace.csv', '')
         plot_trace(case_name, load_trace(trace_file), Path(args.save) / f"{case_name}_sa.png")
 
 

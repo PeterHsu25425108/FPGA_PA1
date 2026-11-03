@@ -2,6 +2,7 @@
 #define SOLVER_H
 #include"DEBUG.h"
 #include<vector>
+#include<cstdint>
 #include<unordered_map>
 #include<tuple>
 #include<string>
@@ -80,6 +81,9 @@ public:
 
     // write one row per temperature step of SA_optimize to a CSV file (for plotting the SA run)
     void openTrace(string filename);
+    // every `every` temperature steps, append the positions of all blocks to a binary file
+    // (for animating the placement; see animate_sa.py). Enabled by SA_SNAPSHOT_EVERY in main.cpp.
+    void openSnapshot(string filename, int every);
 
     double getInitTemp() const { return initialTemp; }
     void setInitTemp(double temp) { initialTemp = temp; }
@@ -107,6 +111,12 @@ private:
     double roundStartTemp = 0; // initial temperature of the current round
     double reheatTemp = -1; // temperature of round 1 where the move range turned local
     void writeTrace(double temp, double acceptRate);
+
+    // placement snapshots
+    ofstream snap_file;
+    int snap_every = 0;
+    long long int trace_steps = 0; // number of writeTrace calls so far
+    void writeSnapshot(double temp);
 
     // indexing: [x][y] (the first dim is x-coordinate, which is column index)
     vector<vector<int>> U; // store the coverage U of each grid cell

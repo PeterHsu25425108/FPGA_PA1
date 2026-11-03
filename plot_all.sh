@@ -9,7 +9,7 @@
 #   <case>_cc.png      initial | final congestion map U / mean(U), shared color scale
 #   <case>_hpwl.png    per-net HPWL charts (initial vs final)
 #   <case>_sa.png      HPWL / CC / cost / temperature over the SA iterations (needs result/<case>_trace.csv)
-# plus plot/summary.png comparing all cases; the plots embedded in README.md are copied to docs/figures/results/
+# plus plot/summary.png comparing all cases (HPWL, CC and runtime); the plots embedded in README.md are copied to docs/figures/results/
 
 MODE=${1:-density}
 
@@ -92,7 +92,7 @@ fi
 echo ""
 
 # Copy the plots embedded in README.md into docs/ (plot/ itself is not tracked)
-DOC_PLOTS="summary.png hidden1_cc.png hidden2_cc.png hidden3_cc.png hidden3_sa.png"
+DOC_PLOTS="summary.png clma_2_sa.png hidden1_cc.png hidden2_cc.png hidden3_cc.png hidden3_sa.png"
 mkdir -p docs/figures/results
 for f in $DOC_PLOTS; do
     [ -f "plot/$f" ] && cp "plot/$f" docs/figures/results/

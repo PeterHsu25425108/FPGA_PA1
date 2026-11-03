@@ -25,7 +25,35 @@ void Solver::openTrace(string filename){
     trace_file << "round,iter,time,T,accept_rate,HPWL,CC,best_HPWL,best_CC,T0,R_limit\n";
 }
 
+// Snapshot file layout (little endian):
+//   header: int32 numLBs, int32 C, int32 R
+//   frame:  int32 round, int64 iter, double T, double HPWL, double CC, double R_limit,
+//           then numLBs x (int16 x, int16 y) in input order
+void Solver::openSnapshot(string filename, int every){
+    snap_file.open(filename, ios::binary);
+    snap_every = every;
+    int32_t header[3] = {numLBs, C, R};
+    snap_file.write(reinterpret_cast<const char*>(header), sizeof(header));
+}
+
+void Solver::writeSnapshot(double temp){
+    int32_t round = sa_round;
+    int64_t it = trace_iter;
+    double vals[4] = {temp, prev_wirelength, prev_CC, rangeLimit};
+    snap_file.write(reinterpret_cast<const char*>(&round), sizeof(round));
+    snap_file.write(reinterpret_cast<const char*>(&it), sizeof(it));
+    snap_file.write(reinterpret_cast<const char*>(vals), sizeof(vals));
+    vector<int16_t> pos(2 * numLBs);
+    for(int i = 0; i < numLBs; ++i){
+        pos[2 * i] = static_cast<int16_t>(blocks[i].x);
+        pos[2 * i + 1] = static_cast<int16_t>(blocks[i].y);
+    }
+    snap_file.write(reinterpret_cast<const char*>(pos.data()), pos.size() * sizeof(int16_t));
+}
+
 void Solver::writeTrace(double temp, double acceptRate){
+    if(snap_file.is_open() && trace_steps++ % snap_every == 0)
+        writeSnapshot(temp);
     if(!trace_file.is_open()) return;
     double elapsed_secs = double(clock() - prog_start_time) / CLOCKS_PER_SEC;
     trace_file << sa_round << "," << trace_iter << "," << elapsed_secs << "," << temp << ","
@@ -37,6 +65,11 @@ void Solver::writeTrace(double temp, double acceptRate){
 // rangeLimit adapts so that about 44% of the moves get accepted
 #define RANGE_LIMIT 1
 #define TARGET_ACCEPT_RATE 0.44
+
+// Placement snapshots (SA_SNAPSHOT_EVERY in main.cpp): besides every n temperature steps, one every
+// SNAP_FINE_EVERY iterations during the first SNAP_FINE_ITERS iterations of round 1
+#define SNAP_FINE_EVERY 500
+#define SNAP_FINE_ITERS 50000
 
 // Each round starts at ROUND_TEMP_RATIO times the previous round's initial temperature.
 // Rounds 2+ resume from the point of round 1 where the move range had shrunk to
@@ -241,6 +274,11 @@ void Solver::SA_optimize(int max_iterations){
         
         // apply perturbation
         bool accept_perturb = perturb(block_idx, new_x, new_y, acceptCount, iter);
+        // the start of round 1 scrambles the whole placement within a few temperature steps,
+        // so snapshots are also taken every SNAP_FINE_EVERY iterations there
+        if(snap_file.is_open() && sa_round == 1 && trace_iter <= SNAP_FINE_ITERS
+           && trace_iter % SNAP_FINE_EVERY == 0 && iter % changeTempIter != 0)
+            writeSnapshot(T);
 
         // After every changeTempIter iterations, update temperature
         if(iter % changeTempIter == 0){
