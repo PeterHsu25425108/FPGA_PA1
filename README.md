@@ -187,6 +187,44 @@ The bounding box update uses anchor checks to determine when a boundary can chan
 
 ![Anchor check](docs/figures/anchor_check.png)
 
+### 5.3 Runtime saved by net filtering and anchor checks
+The speedup compared here is the net filtering of Section 5.1 together with the anchor checks of Section 5.2. The version **w/o speedup** has both removed: the nets of the moved block and of the swapped block are all evaluated as they are, so a net that contains both blocks is evaluated twice, and every evaluated net rescans all its blocks and IOs on both axes (`ENABLE_SPEEDUP` = 0 in `Solver.cpp`, and no filtering in `SA_update.cpp`). The two must be removed together: without the filtering, the anchor check of a net that contains both blocks would only see one of the two moves. Without the anchor checks, a full rescan uses the new positions of both blocks, so such a net comes out unchanged on both evaluations and the result stays correct.
+
+**Complexity of one perturbation.** Notation: $\mathcal{N}_1, \mathcal{N}_2$ are the nets of the moved block and of the swapped block, $d_1 = |\mathcal{N}_1|$, $d_2 = |\mathcal{N}_2|$ ($d_2 = 0$ for a move to an empty site); $\mathcal{A} = \mathcal{N}_1 \triangle \mathcal{N}_2$ is the set of affected nets after the filtering, $|\mathcal{A}| \le d_1 + d_2$; $p_n$ is the number of pins (blocks and IOs) of net $n$; $B^\text{old}_n, B^\text{new}_n$ are the numbers of grid cells in its old and new bounding box; $\mathcal{C} \subseteq \mathcal{A}$ are the nets whose box actually changes (the same set in both versions); $\mathcal{A}_r \subseteq \mathcal{A}$ are the nets that still need a rescan with the speedup; $N$ is the number of blocks.
+
+| Step | w/o speedup | With speedup |
+|------|-------------|--------------|
+| Collect the affected nets | $O(d_1 + d_2)$: append $\mathcal{N}_1$ and $\mathcal{N}_2$, nets in both appear twice | $O(d_1 + d_2)$ expected: hash set of $\mathcal{N}_1$, then remove the nets in $\mathcal{N}_1 \cap \mathcal{N}_2$ (Section 5.1) |
+| Nets whose new bounding box is computed | $d_1 + d_2$ | $\lvert\mathcal{A}\rvert = d_1 + d_2 - 2\lvert\mathcal{N}_1 \cap \mathcal{N}_2\rvert$ |
+| New bounding box of one net | $\Theta(p_n)$: always rescans all pins | $O(1)$ if the moved block is not on an edge of the box, or moves outward across it; $O(p_n)$ (one rescan, for one or both axes) if it leaves an edge (Section 5.2) |
+| New bounding boxes of all evaluated nets | $\Theta\big(\sum_{n \in \mathcal{N}_1} p_n + \sum_{n \in \mathcal{N}_2} p_n\big)$ | $O\big(\lvert\mathcal{A}\rvert + \sum_{n \in \mathcal{A}_r} p_n\big)$ |
+| $U$ and CC update (Section 4.2), again on a rollback | $O\big(\sum_{n \in \mathcal{C}} (B^\text{old}_n + B^\text{new}_n)\big)$ | same |
+| Commit an accepted move | $O(\lvert\mathcal{C}\rvert)$, plus $O(N)$ to copy the placement when it is a new best | same |
+| **Total** | $O\big(\sum_{n \in \mathcal{N}_1} p_n + \sum_{n \in \mathcal{N}_2} p_n + \sum_{n \in \mathcal{C}} (B^\text{old}_n + B^\text{new}_n)\big)$ | $O\big(d_1 + d_2 + \sum_{n \in \mathcal{A}_r} p_n + \sum_{n \in \mathcal{C}} (B^\text{old}_n + B^\text{new}_n)\big)$ |
+
+- The worst case of the bounding box term is the same order, since every affected net can need a rescan ($\mathcal{A}_r = \mathcal{A}$). The gain is in the typical case: a block is on an edge of a net with $p_n$ pins with a probability of roughly $4 / p_n$ (two edges per axis), so the expected cost of a net drops from $\Theta(p_n)$ to about $O(1)$, and the bounding box term from $\Theta\big(\sum p_n\big)$ to about $O(d_1 + d_2)$. Pins on the integer grid often share an edge, which makes rescans somewhat more frequent than this estimate.
+- The filtering removes the nets shared by the two swapped blocks, which w/o speedup are rescanned twice although their box cannot change. Its own cost is a hash set of $d_1$ entries, $O(d_1 + d_2)$ expected, but with a larger constant than the plain append.
+- The $U$ term is not changed by the speedup and depends on the box areas, which are up to $C \cdot R$ per net in the worst case.
+
+**Measured runtime.** Both versions were built from the current code and run with seeds 1 to 5, 40 runs in parallel (20 per version, so both see the same machine load). The overall runtime is the mean wall-clock time of a run; the time per iteration is the CPU time of a run divided by its number of iterations (from the SA trace), averaged over the seeds. The change is $t_\text{on} / t_\text{off} - 1$:
+
+| Case | Iterations | Runtime w/o speedup | Runtime with speedup | Change | Time per iteration w/o speedup | Time per iteration with speedup | Change | $\sum p_n$ per block |
+|------|------------|---------------------|----------------------|--------|--------------------------------|---------------------------------|--------|----------------------|
+| alu4 | 8.7M | 46 s | **29 s** | -38% | 5.32 µs | **3.30 µs** | -38% | 574 |
+| apex4 | 8.9M | 42 s | **35 s** | -17% | 4.63 µs | **3.85 µs** | -17% | 254 |
+| clma_2 | 14.4M | 87 s | **78 s** | -10% | 6.03 µs | **5.40 µs** | -10% | 190 |
+| elliptic | 10.7M | 49 s | **35 s** | -28% | 4.56 µs | **3.28 µs** | -28% | 243 |
+| pdc | 11.8M | 78 s | **51 s** | -34% | 6.50 µs | **4.32 µs** | -34% | 412 |
+| hidden1 | 14.1M | 81 s | **62 s** | -24% | 5.73 µs | **4.36 µs** | -24% | 445 |
+| hidden2 | 17.6M | 77 s | **77 s** | -0% | 4.37 µs | **4.38 µs** | +0% | 14 |
+| hidden3 | 20.6M | 131 s | **124 s** | -5% | 6.28 µs | **5.95 µs** | -5% | 86 |
+| **Mean** | 13.3M | 74 s | **61 s** | -20% | 5.43 µs | **4.35 µs** | -20% | 277 |
+
+- The speedup changes no result: for every case and seed both versions run the same number of iterations and end with exactly the same HPWL and CC, so the overall runtime drops by the same fraction as the time per iteration (on average 20%, up to 38% on alu4).
+- A rerun of seed 1 with only six runs in parallel gives the same picture (time per iteration w/o → with speedup): alu4 5.38 → 3.47 µs (-36%), hidden2 3.87 → 3.86 µs (-0%), hidden3 6.06 → 5.21 µs (-14%).
+- What the check saves is the rescan of a net, $O(p_n)$ for a net with $p_n$ pins. The last column is the mean over blocks of $\sum p_n$ over the nets of the block, i.e. how many pins one move rescans without the check. The saving follows this number: alu4, pdc and hidden1 have blocks on large nets and gain the most, while hidden2 has only 1.3 nets of 4.8 pins per block on average, so there is almost nothing to rescan and the run is not faster.
+- The check does not touch the $U$ update (Section 4.2), whose cost grows with the area of the bounding boxes. This is the remaining part of each iteration, and the reason the larger chips stay at 4 to 6 µs per iteration even with the speedup.
+
 ## 6. Visualization
 - With `SA_TRACE` enabled in `src/main.cpp` (on by default), the placer writes `<output>_trace.csv` next to the output file, with one row per temperature step: round, iteration, time, $T$, acceptance rate, the current and best HPWL and CC, the round's initial $T$, and $R_\text{limit}$.
 - The placer takes an optional random seed, `./placer <input> <output> [seed]` (default 1), and `python3 bench.py --out <dir>` runs all test cases with several seeds and reports the mean and standard deviation of HPWL, CC, $\text{HPWL} \cdot \text{CC}$, $\text{Cost}$ and runtime (`--compare <results.json>` compares two versions).
@@ -202,7 +240,7 @@ The bounding box update uses anchor checks to determine when a boundary can chan
 
 - `./plot_all.sh` also copies the result plots embedded in this report into `docs/figures/results/`, since `plot/` is not tracked. The two plots of the earlier version (`*_before_sa.png`) come from its benchmark traces: `python3 plot_sa.py bench/abl_v2/clma_2_s1_trace.csv --name clma_2_before --save docs/figures/results/`.
 - The diagrams in this report are generated by `python3 docs/make_diagrams.py` into `docs/figures/` (PNG and SVG).
-- **Animation of the SA run.** With the environment variable `SA_SNAPSHOT_EVERY=<n>`, the placer also writes the positions of all blocks every $n$ temperature steps to `<output>_snap.bin`, plus one every 500 iterations during the first 50,000 iterations of round 1, where the whole placement is scrambled; this does not change the result. `animate_sa.py` turns it into a GIF with the blocks colored by their starting column, the map of $U / \text{mean}(U)$, and the cost over the run. With `--frames`, the frames are spaced by how much the picture visibly changes, so the scramble, the clusters forming as round 1 cools, and the restarts play in slow motion:
+- **Animation of the SA run.** With the environment variable `SA_SNAPSHOT_EVERY=<n>`, the placer also writes the positions of all blocks every $n$ temperature steps to `<output>_snap.bin`, plus one every 500 iterations during the first 50,000 iterations of round 1, where the whole placement is scrambled; this does not change the result. `animate_sa.py` turns it into a GIF with the blocks colored by their starting column, the map of $U / \text{mean}(U)$, and the cost over the run. With `--frames`, the frames are spaced by how much the picture visibly changes, so the scramble, the clusters forming as round 1 cools, and the restarts play in slow motion (the hidden3 animation is shown in Section 7.7):
 
 ```
 SA_SNAPSHOT_EVERY=1 ./placer testcases/hidden3.txt result/hidden3.out 1
@@ -457,6 +495,10 @@ Before colder restarts (range-limited moves only, seed 1), the restarted rounds 
 ![SA run of hidden3](docs/figures/results/hidden3_sa.png)
 
 With the current version (seed 1), the end of round 1 is 10.8% above the final result, and every round from 2 to 5 lowers the best cost further (cost panel). Even with $R_\text{limit} = 1$, the acceptance rate stays around 33% to 42% on this large chip, so the rounds end through the early stop rather than by cooling to $T < 10^{-3}$.
+
+![Animation of the SA run of hidden3](plot/hidden3_anim.gif)
+
+The same run as an animation (Section 6), with the stretches where the placement changes most in slow motion. Left: every block, colored by the column it started in. At first the colors run as a gradient from left to right, since the initial placement fills the chip column by column; the hot start of round 1 scrambles them within a few temperature steps, and blocks of the same color then gather into clusters as round 1 cools. Each later round restarts colder and only reshapes these clusters instead of scrambling them again (Section 7.5). Middle: $U / \text{mean}(U)$ on one fixed scale, which goes from the congested left part of the initial placement to nearly uniform. Bottom: the cost over the run, with the current point marked.
 
 ![Congestion map of hidden1](docs/figures/results/hidden1_cc.png)
 

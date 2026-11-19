@@ -121,7 +121,7 @@ def plot_trace(case_name, trace, save_to):
     ticks = {round(final_cost, 3), round(best_cost[round_ends[0]], 3)}
     ticks |= {t for t in (1.0, 1.5, 2.0) if final_cost + 2 * delta < t < cost.max() * 1.03}
     ax.set_yticks(sorted(ticks))
-    ax.set_yticklabels([f"{t:.3f}" if t < 1 else f"{t:.1f}" for t in sorted(ticks)])
+    ax.set_yticklabels([f"{t:.1f}" if t in (1.0, 1.5, 2.0) else f"{t:.3f}" for t in sorted(ticks)])
     ax.minorticks_off()
     ax.set_title(f"Cost = HPWL / HPWL₀ + CC / CC₀   2 → {final_cost:.4f}   "
                  f"(shifted log axis: height ∝ log(cost − {c0:.3f}))", fontsize=12,
