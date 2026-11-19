@@ -228,6 +228,7 @@ The speedup compared here is the net filtering of Section 5.1 together with the 
 ## 6. Visualization
 - With `SA_TRACE` enabled in `src/main.cpp` (on by default), the placer writes `<output>_trace.csv` next to the output file, with one row per temperature step: round, iteration, time, $T$, acceptance rate, the current and best HPWL and CC, the round's initial $T$, and $R_\text{limit}$.
 - The placer takes an optional random seed, `./placer <input> <output> [seed]` (default 1), and `python3 bench.py --out <dir>` runs all test cases with several seeds and reports the mean and standard deviation of HPWL, CC, $\text{HPWL} \cdot \text{CC}$, $\text{Cost}$ and runtime (`--compare <results.json>` compares two versions).
+- `testcases/` and `result/` are not tracked; the repository has them as `testcases.zip` (the eight test cases) and `result.zip` (the seed-1 results of all test cases: the placement `<case>.out`, the initial placement `<case>_init.txt`, the SA trace `<case>_trace.csv`, and the snapshots `hidden3_snap.bin` used for the animation below). Extract both in the repository root before running the scripts: `unzip testcases.zip && unzip result.zip`. `result.zip` is compressed with bzip2, which `unzip` and 7-Zip support, but the built-in extractor of Windows may not.
 - `./plot_all.sh` turns the results in `result/` into these plots in `plot/`:
 
 | Plot | Script | Content |
